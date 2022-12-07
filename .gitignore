@@ -1,0 +1,9 @@
+*.pt
+*.log
+*.npy
+__pycache__
+*.jpg
+*.jpeg
+*.png
+*.pdf
+.ipynb_checkpoints/
