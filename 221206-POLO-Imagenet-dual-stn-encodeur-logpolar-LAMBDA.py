@@ -479,7 +479,7 @@ def test(loader):
             # sum up batch loss
             #test_loss += F.nll_loss(output, target, size_average=False).item()
             test_loss += loss_func(output, target).item()
-            kl_loss += kl_divergence(model, z, mu, sigma)
+            kl_loss += kl_divergence(model, z, mu, sigma).item()
             # get the index of the max log-probability
             #pred = output.max(1, keepdim=True)[1]
             pred = output.argmax(dim=1, keepdim=True)
@@ -499,7 +499,7 @@ def test(loader):
 
 
 lr = 1e-4
-LAMBDA = 0.01
+LAMBDA = 1e-3
 
 
 # In[33]:
@@ -524,7 +524,7 @@ loss_func = nn.CrossEntropyLoss()
 
 acc = []
 loss = []
-loss_kl = []
+kl_loss = []
 
 
 args.epochs = 300
@@ -536,10 +536,10 @@ for epoch in range(1, args.epochs + 1):
     loss.append(curr_loss)
     kl_loss.append(curr_kl_loss)
     #scheduler.step()
-    torch.save(model, "low_comp_polo_stn_dual_lambda.pt")
-    np.save("low_comp_polo_stn_dual_lambda_acc", acc)
-    np.save("low_comp_polo_stn_dual_lambda_loss", loss)
-    np.save("low_comp_polo_stn_dual_lambda_kl_loss", kl_loss)
+    torch.save(model, f"low_comp_polo_stn_dual_lambda_{LAMBDA}.pt")
+    np.save(f"low_comp_polo_stn_dual_lambda_{LAMBDA}_acc", acc)
+    np.save(f"low_comp_polo_stn_dual_lambda_{LAMBDA}_loss", loss)
+    np.save(f"low_comp_polo_stn_dual_lambda_{LAMBDA}_kl_loss", kl_loss)
 
 model.cpu()
 torch.cuda.empty_cache()
