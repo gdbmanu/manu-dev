@@ -436,8 +436,6 @@ polo_dataloader = { 'train' : torch.utils.data.DataLoader(
 # In[81]:
 
 
-data_polo['in'].shape, data_polo['out'].shape
-
 
 # # Creating an Attention Transformer model with log-polar entry (POLO-STN)
 
@@ -457,12 +455,12 @@ transform_in =  transforms.Compose([
 # In[83]:
 
 
-def kl_divergence(model, z, mu, std):
+def kl_divergence(model, z):
     # --------------------------
     # Monte carlo KL divergence
     # --------------------------
     # 1. define the first two probabilities (in this case Normal for both)
-    p = torch.distributions.Normal(torch.zeros_like(mu), .3 * torch.ones_like(std))
+    p = torch.distributions.Normal(torch.zeros_like(z), .3 * torch.ones_like(z))
 
     # 2. get the probabilities from the equation
     log_qzx = model.q.log_prob(z)
@@ -528,14 +526,12 @@ class Polo_AttentionTransNet(nn.Module):
             logvar = self.logvar(xs) + 3
             sigma = torch.exp(-logvar / 2)
             if self.deterministic:
-                theta = torch.cat((self.downscale.unsqueeze(0).repeat(
-                                    mu.size(0), 1, 1), mu.unsqueeze(2)),
-                                    dim=2)
+                z = mu
             else:
                 self.q = torch.distributions.Normal(mu, sigma)
                 z = self.q.rsample()
                 print(z[0,...])
-                theta = torch.cat((self.downscale.unsqueeze(0).repeat(
+            theta = torch.cat((self.downscale.unsqueeze(0).repeat(
                                     z.size(0), 1, 1), z.unsqueeze(2)),
                                       dim=2)
         
@@ -590,7 +586,7 @@ class Polo_AttentionTransNet(nn.Module):
         #print(xsb.shape)
 
         y = torch.cat((ya, yb), dim=1)
-        y = F.relu(self.f1(y.view(-1, (50+100) * (n_levels['in']-1) * n_eccentricity['in'] // 2 * n_azimuth['in'] // 2)))
+        y = F.relu(self.fc1(y.view(-1, (50+100) * (n_levels['in']-1) * n_eccentricity['in'] // 2 * n_azimuth['in'] // 2)))
         y = self.fc2(y)
         return y, theta, z
 
@@ -611,7 +607,7 @@ def train(epoch, loader):
         optimizer.zero_grad()
         output, theta, z = model(data_original, data_polo)
         if model.do_stn and not model.deterministic:
-            loss = loss_func(output, target) + kl_divergence(model, z, mu, sigma)
+            loss = loss_func(output, target) + kl_divergence(model, z)
         else:
             loss = loss_func(output, target)
         loss.backward()
@@ -619,8 +615,8 @@ def train(epoch, loader):
         if batch_idx % args.log_interval == 0:
             print('Train Epoch: {}/{} [{}/{} ({:.0f}%)]\tLoss: {:.6f}'.format(
                 epoch, args.epochs, batch_idx * len(data_original),
-                len(dataloader['train'].dataset),
-                100. * batch_idx / len(dataloader['train']), loss.item()))
+                len(polo_dataloader['train'].dataset),
+                100. * batch_idx / len(polo_dataloader['train']), loss.item()))
 
 
 def test(loader):
@@ -647,9 +643,9 @@ def test(loader):
 
         test_loss /= len(dataloader['test'].dataset)
         print('\nTest set: Average loss: {:.4f}, Accuracy: {}/{} ({:.0f}%)\n'.
-              format(test_loss, correct, len(dataloader['test'].dataset),
-                     100. * correct / len(dataloader['test'].dataset)))
-        return correct / len(dataloader['test'].dataset)
+              format(test_loss, correct, len(polo_dataloader['test'].dataset),
+                     100. * correct / len(polo_dataloader['test'].dataset)))
+        return correct / len(polo_dataloader['test'].dataset)
 
 
 # # Training 
