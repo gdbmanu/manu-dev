@@ -395,7 +395,7 @@ dataset_size['train'], dataset_size['test']
 # In[71]:
 
 
-batch_size = 50
+batch_size = 16
 num_workers = 1
 
 vgg_dataloader = { 'train' : torch.utils.data.DataLoader(
@@ -561,6 +561,7 @@ class Polo_AttentionTransNet(nn.Module):
             w_x_polo ={'in': torch.zeros_like(x_polo['in']),
                        'out': torch.zeros_like(x_polo['out'])}
             for i in range(batch_size):
+                #print(i)
                 d, w = transform_in(x[i,...])
                 w_x_polo['in'][i,...] = w['in']
                 w_x_polo['out'][i,...] = w['out']
@@ -612,7 +613,7 @@ def train(epoch, loader):
             loss = loss_func(output, target)
         loss.backward()
         optimizer.step()
-        if batch_idx % args.log_interval == 0:
+        if True: #batch_idx % args.log_interval == 0:
             print('Train Epoch: {}/{} [{}/{} ({:.0f}%)]\tLoss: {:.6f}'.format(
                 epoch, args.epochs, batch_idx * len(data_original),
                 len(polo_dataloader['train'].dataset),
@@ -641,7 +642,7 @@ def test(loader):
             pred = output.argmax(dim=1, keepdim=True)
             correct += pred.eq(target.view_as(pred)).sum().item()
 
-        test_loss /= len(dataloader['test'].dataset)
+        test_loss /= len(polo_dataloader['test'].dataset)
         print('\nTest set: Average loss: {:.4f}, Accuracy: {}/{} ({:.0f}%)\n'.
               format(test_loss, correct, len(polo_dataloader['test'].dataset),
                      100. * correct / len(polo_dataloader['test'].dataset)))
@@ -690,10 +691,10 @@ for epoch in range(1, args.epochs + 1):
     train(epoch, polo_dataloader['train'])
     curr_acc = test(polo_dataloader['test'])
     acc.append(curr_acc)
-    loss.append(curr_loss)
+    #loss.append(curr_loss)
     torch.save(model, f"polo_imagenet_vgg_stn_det_{deterministic}.pt")
     np.save(f"polo_imagenet_vgg_stn_det_{deterministic}_acc", acc)
-    np.save(f"polo_imagenet_vgg_stn_det_{deterministic}_loss", loss)
+    #np.save(f"polo_imagenet_vgg_stn_det_{deterministic}_loss", loss)
     #scheduler.step()
 
 

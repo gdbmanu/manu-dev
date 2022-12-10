@@ -50,7 +50,7 @@ from skimage.transform import warp_polar
 # In[5]:
 
 
-colors = ['b', 'r', 'k', 'g', 'm', 'y']
+colors = ['b', 'r', 'k', 'g', 'm', 'y']221209-POLO-Imagenet-vgg-stn-encodeur-logpolar.py
 fig_width = 20
 phi = (np.sqrt(5)+1)/2 # golden ratio for the figures :-)
 
