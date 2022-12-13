@@ -657,7 +657,7 @@ def test(loader):
 lr = 1e-4
 LAMBDA = 0.01
 do_stn=True
-deterministic=True
+deterministic=False
 
 
 # In[91]:
