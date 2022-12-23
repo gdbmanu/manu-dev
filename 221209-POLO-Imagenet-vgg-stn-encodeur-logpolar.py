@@ -528,6 +528,7 @@ class Polo_AttentionTransNet(nn.Module):
             if self.deterministic:
                 z = mu
             else:
+                #self.q = torch.distributions.Normal(mu, torch.ones_like(mu) * 0.2) #sigma)
                 self.q = torch.distributions.Normal(mu, sigma)
                 z = self.q.rsample()
                 print(z[0,...])
@@ -655,7 +656,7 @@ def test(loader):
 
 
 lr = 1e-4
-LAMBDA = 0.01
+LAMBDA = 1e-2
 do_stn=True
 deterministic=False
 
@@ -665,7 +666,7 @@ deterministic=False
 
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 #model = torch.load("../models/low_comp_polo_stn.pt")
-model = Polo_AttentionTransNet(do_stn=do_stn, deterministic=deterministic).to(device)
+model = Polo_AttentionTransNet(do_stn=do_stn, deterministic=deterministic, LAMBDA=LAMBDA).to(device)
 
 
 # In[92]:
@@ -684,16 +685,15 @@ acc = []
 loss = []
 
 
-
-args.epochs = 100
+args.epochs = 1000
 model.do_stn = True
 for epoch in range(1, args.epochs + 1):
     train(epoch, polo_dataloader['train'])
     curr_acc = test(polo_dataloader['test'])
     acc.append(curr_acc)
     #loss.append(curr_loss)
-    torch.save(model, f"polo_imagenet_vgg_stn_det_{deterministic}.pt")
-    np.save(f"polo_imagenet_vgg_stn_det_{deterministic}_acc", acc)
+    torch.save(model, f"polo_imagenet_vgg_stn_{deterministic}_{LAMBDA}_mu.pt")
+    np.save(f"polo_imagenet_vgg_stn_{deterministic}_{LAMBDA}_mu_acc", acc)
     #np.save(f"polo_imagenet_vgg_stn_det_{deterministic}_loss", loss)
     #scheduler.step()
 

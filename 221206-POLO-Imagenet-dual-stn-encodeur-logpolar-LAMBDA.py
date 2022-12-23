@@ -274,7 +274,7 @@ def kl_divergence(model, z, mu, std):
     # Monte carlo KL divergence
     # --------------------------
     # 1. define the first two probabilities (in this case Normal for both)
-    p = torch.distributions.Normal(torch.zeros_like(mu), .3 * torch.ones_like(std))
+    p = torch.distributions.Normal(torch.zeros_like(z), .2 * torch.ones_like(z))
 
     # 2. get the probabilities from the equation
     log_qzx = model.q.log_prob(z)
@@ -300,11 +300,11 @@ class Polo_AttentionTransNet(nn.Module):
         self.LAMBDA = LAMBDA
 
         ##  The what pathway
-        #self.wloc1 = nn.Conv2d(n_color['out'] * n_theta['out'] * n_phase['out'], 
-        #                      50, 3, padding=1)
-        #self.wloc2a = nn.Conv2d(50, 100, 3, padding=1)
-        #self.wloc2b = nn.Conv2d(n_color['in'] * n_theta['in'] * n_phase['in'], 
-        #                       50, 3, padding=1)
+        self.wloc1 = nn.Conv2d(n_color['out'] * n_theta['out'] * n_phase['out'], 
+                              50, 3, padding=1)
+        self.wloc2a = nn.Conv2d(50, 100, 3, padding=1)
+        self.wloc2b = nn.Conv2d(n_color['in'] * n_theta['in'] * n_phase['in'], 
+                               50, 3, padding=1)
         self.wloc3 = nn.Linear((n_levels['in']-1) * n_eccentricity['in'] // 2 * n_azimuth['in'] // 2 * (50+100), 
                               500)
         self.wloc4 = nn.Linear(500, 2)
@@ -315,10 +315,10 @@ class Polo_AttentionTransNet(nn.Module):
                 
         ##  The where pathway        
         self.loc1 = nn.Conv2d(n_color['out'] * n_theta['out'] * n_phase['out'], 
-                              50, 5, padding=2)
-        self.loc2a = nn.Conv2d(50, 100, 5, padding=2)
+                              50, 5, padding=2, stride=2)
+        self.loc2a = nn.Conv2d(50, 100, 5, padding=2,stride=2)
         self.loc2b = nn.Conv2d(n_color['in'] * n_theta['in'] * n_phase['in'], 
-                               50, 5, padding=2)
+                               50, 5, padding=2,stride=2)
         self.loc3 = nn.Linear((n_levels['in']-1) * n_eccentricity['in'] // 2 * n_azimuth['in'] // 2 * (50+100), 
                               500)
         self.mu = nn.Linear(500, 2) #, bias=False)
@@ -346,19 +346,19 @@ class Polo_AttentionTransNet(nn.Module):
 
             #print(x_polo['out'].shape)
 
-            with torch.no_grad():
+            if True: #with torch.no_grad():
                 xs = F.relu(self.loc1(x_polo['out']))
-                xs = nn.MaxPool2d(2)(xs)        
+                #xs = nn.MaxPool2d(2)(xs)        
 
                 #print(xs.shape)
 
                 xsa = F.relu(self.loc2a(xs))
-                xsa = nn.MaxPool2d(2)(xsa)
+                #xsa = nn.MaxPool2d(2)(xsa)
 
                 #print(xsa.shape)
 
                 xsb = F.relu(self.loc2b(x_polo['in']))
-                xsb = nn.MaxPool2d(2)(xsb)
+                #xsb = nn.MaxPool2d(2)(xsb)
 
                 #print(xsb.shape)
 
@@ -372,7 +372,7 @@ class Polo_AttentionTransNet(nn.Module):
             sigma = torch.exp(-logvar / 2)
             self.q = torch.distributions.Normal(mu, sigma)
             z = self.q.rsample()
-            # print(z[0,...])
+            print(z[0,...])
             theta = torch.cat((self.downscale.unsqueeze(0).repeat(
                                 z.size(0), 1, 1), z.unsqueeze(2)),
                                   dim=2)
@@ -412,17 +412,17 @@ class Polo_AttentionTransNet(nn.Module):
 
         # print(x.shape)
         # Perform the usual forward pass
-        ya = F.relu(self.loc1(w_x_polo['out']))
+        ya = F.relu(self.wloc1(w_x_polo['out']))
         ya = nn.MaxPool2d(2)(ya)        
         
         #print(xs.shape)
         
-        ya = F.relu(self.loc2a(ya))
+        ya = F.relu(self.wloc2a(ya))
         ya = nn.MaxPool2d(2)(ya)
         
         #print(xsa.shape)
         
-        yb = F.relu(self.loc2b(w_x_polo['in']))
+        yb = F.relu(self.wloc2b(w_x_polo['in']))
         yb = nn.MaxPool2d(2)(yb)
         
         #print(xsb.shape)
@@ -499,7 +499,7 @@ def test(loader):
 
 
 lr = 1e-4
-LAMBDA = 1e-6
+LAMBDA = 3e-2
 
 
 # In[33]:
@@ -527,7 +527,7 @@ loss = []
 kl_loss = []
 
 
-args.epochs = 300
+args.epochs = 3000
 model.do_stn = True
 for epoch in range(1, args.epochs + 1):
     train(epoch, dataloader['train'])
