@@ -497,7 +497,7 @@ LAMBDA = 1e-5
 # In[33]:
 
 
-device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+device = torch.device("cuda:1" if torch.cuda.is_available() else "cpu")
 #model = torch.load("../models/low_comp_polo_stn.pt")
 model = Polo_AttentionTransNet(LAMBDA=LAMBDA).to(device)
 
