@@ -274,7 +274,7 @@ def kl_divergence(model, z, mu, std):
     # Monte carlo KL divergence
     # --------------------------
     # 1. define the first two probabilities (in this case Normal for both)
-    p = torch.distributions.Normal(torch.zeros_like(z), .2 * torch.ones_like(z))
+    p = torch.distributions.Normal(torch.zeros_like(mu), args.std_sched * torch.ones_like(std))
 
     # 2. get the probabilities from the equation
     log_qzx = model.q.log_prob(z)
@@ -286,7 +286,6 @@ def kl_divergence(model, z, mu, std):
     # sum over last dim to go from single dim distribution to multi-dim
     kl = model.LAMBDA * kl.sum()
     return kl
-
 
 # In[30]:
 
