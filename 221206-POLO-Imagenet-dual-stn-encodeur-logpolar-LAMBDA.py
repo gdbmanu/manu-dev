@@ -499,13 +499,13 @@ def test(loader):
 
 
 lr = 1e-4
-LAMBDA = 3e-2
+LAMBDA = 1e-6
 
 
 # In[33]:
 
 
-device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
 #model = torch.load("../models/low_comp_polo_stn.pt")
 model = Polo_AttentionTransNet(LAMBDA=LAMBDA).to(device)
 

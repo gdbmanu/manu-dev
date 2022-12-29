@@ -490,13 +490,13 @@ def test(loader):
 
 
 lr = 1e-4
-LAMBDA = 1e-5
+LAMBDA = 3e-6
 
 
 # In[33]:
 
 
-device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
 #model = torch.load("../models/low_comp_polo_stn.pt")
 model = Polo_AttentionTransNet(LAMBDA=LAMBDA).to(device)
 
@@ -517,12 +517,13 @@ acc = []
 loss = []
 kl_loss = []
 
-args.epochs = 3000
+args.epochs = 1000
 model.do_stn = True
 log_std_min = -6
 log_std_max = 0
-
 std_axe = np.exp(np.linspace(log_std_min, log_std_max, args.epochs))
+
+#std_axe = np.linspace(1e-6, 1, args.epochs)
 
 for epoch in range(args.epochs):
     args.std_sched = std_axe[epoch]
