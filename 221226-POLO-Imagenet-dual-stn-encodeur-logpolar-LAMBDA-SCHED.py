@@ -490,13 +490,13 @@ def test(loader):
 
 
 lr = 1e-4
-LAMBDA = 1e-6
+LAMBDA = 3e-6
 
 
 # In[33]:
 
 
-device = torch.device("cuda:1" if torch.cuda.is_available() else "cpu")
+device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
 #model = torch.load("../models/low_comp_polo_stn.pt")
 model = Polo_AttentionTransNet(LAMBDA=LAMBDA).to(device)
 
@@ -519,11 +519,11 @@ kl_loss = []
 
 args.epochs = 1000
 model.do_stn = True
-#log_std_min = -6
-#log_std_max = 0
-#std_axe = np.exp(np.linspace(log_std_min, log_std_max, args.epochs))
+log_std_min = -6
+log_std_max = 0
+std_axe = np.exp(np.linspace(log_std_min, log_std_max, args.epochs))
 
-std_axe = np.exp(np.linspace(1e-6, 1, args.epochs))
+#std_axe = np.linspace(1e-6, 1, args.epochs)
 
 for epoch in range(args.epochs):
     args.std_sched = std_axe[epoch]
@@ -532,10 +532,10 @@ for epoch in range(args.epochs):
     acc.append(curr_acc)
     loss.append(curr_loss)
     kl_loss.append(curr_kl_loss)
-    torch.save(model, f"low_comp_polo_stn_dual_lambda_{LAMBDA}_lin_sched.pt")
-    np.save(f"low_comp_polo_stn_dual_lambda_{LAMBDA}_lin_sched_acc", acc)
-    np.save(f"low_comp_polo_stn_dual_lambda_{LAMBDA}_lin_sched_loss", loss)
-    np.save(f"low_comp_polo_stn_dual_lambda_{LAMBDA}_lin_sched_kl_loss", kl_loss)
+    torch.save(model, f"low_comp_polo_stn_dual_lambda_{LAMBDA}_sched.pt")
+    np.save(f"low_comp_polo_stn_dual_lambda_{LAMBDA}_sched_acc", acc)
+    np.save(f"low_comp_polo_stn_dual_lambda_{LAMBDA}_sched_loss", loss)
+    np.save(f"low_comp_polo_stn_dual_lambda_{LAMBDA}_sched_kl_loss", kl_loss)
 
 model.cpu()
 torch.cuda.empty_cache()
