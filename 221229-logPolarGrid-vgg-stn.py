@@ -346,6 +346,12 @@ for epoch in range(1, args.epochs + 1):
     train(epoch, dataloader['train'])
     curr_acc, curr_loss, curr_kl_loss = test(dataloader['test'])
     acc.append(curr_acc)
+    loss.append(curr_loss)
+    kl_loss.append(curr_kl_loss)
+    torch.save(model, f"logPolarGrid_vgg_stn_{deterministic}.pt")
+    np.save(f"logPolarGrid_vgg_stn_{deterministic}_acc", acc)
+    np.save(f"logPolarGrid_vgg_stn_{deterministic}_loss", loss)
+    np.save(f"logPolarGrid_vgg_stn_{deterministic}_loss", kl_loss)
 
 
 # In[ ]:
