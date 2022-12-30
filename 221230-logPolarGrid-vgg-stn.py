@@ -184,7 +184,7 @@ class Grid_AttentionTransNet(nn.Module):
         self.mu = nn.Linear(self.where_num_features, 2) #, bias=False)
         self.logvar = nn.Linear(self.where_num_features, 2) #, bias=False)
         
-        self.mu.weight.data /= torch.sqrt(n_features)
+        self.mu.weight.data /= torch.sqrt(n_features) 
         self.mu.bias.data /= torch.sqrt(n_features)
         
         self.logvar.weight.data /= torch.sqrt(n_features)
@@ -209,7 +209,7 @@ class Grid_AttentionTransNet(nn.Module):
         grid = torch.cat((grid_xs, grid_ys), 3)
         grid = expand_dim(grid, 0, args.batch_size)
         
-        return grid    
+        return grid.to(device)    
 
     def stn(self: object, x: torch.Tensor) -> Tuple[torch.Tensor]:
     
@@ -224,7 +224,7 @@ class Grid_AttentionTransNet(nn.Module):
             mu = self.mu(y)
                                    
             if self.deterministic:
-                self.q = torch.distributions.Normal(mu, torch.ones_like(mu))  
+                self.q = torch.distributions.Normal(mu, .3 * torch.ones_like(mu))  
                 z = mu
             else:
                 logvar = self.logvar(y) + 3
@@ -255,8 +255,7 @@ class Grid_AttentionTransNet(nn.Module):
         x, theta, z = self.stn(x)
         
         logPolx = F.grid_sample(x, self.what_grid)
-        with torch.no_grad():
-            y = self.vgg(logPolx)  
+        y = self.vgg(logPolx)  
         y = self.fc_what(y)
        
         return y, theta, z
@@ -272,7 +271,7 @@ def train(epoch, loader):
 
         optimizer.zero_grad()
         output, theta, z = model(data)
-        if model.do_stn and not model.deterministic:
+        if model.do_stn : #and not model.deterministic:
             loss = loss_func(output, target) + kl_divergence(model, z)
         else:
             loss = loss_func(output, target)
@@ -318,9 +317,9 @@ def test(loader):
 
 
 lr = 1e-4
-LAMBDA = 1e-1
+LAMBDA = 1
 do_stn=True
-deterministic=False
+deterministic=True
 
 
 # In[30]:
@@ -328,7 +327,7 @@ deterministic=False
 
 device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
 #model = torch.load("../models/low_comp_polo_stn.pt")
-model = Grid_AttentionTransNet(do_stn=do_stn, deterministic=deterministic).to(device)
+model = Grid_AttentionTransNet(do_stn=do_stn, LAMBDA=LAMBDA, deterministic=deterministic).to(device)
 
 
 # In[ ]:
@@ -347,12 +346,12 @@ acc = []
 loss = []
 kl_loss = []
 
-args.epochs = 300
+args.epochs = 30
 
 std_axe = np.linspace(1e-2, .3, args.epochs)
 
 for epoch in range(args.epochs):
-    args.std_sched = std_axe[epoch]
+    args.std_sched = .3 #std_axe[epoch]
     train(epoch, dataloader['train'])
     curr_acc, curr_loss, curr_kl_loss = test(dataloader['test'])
     acc.append(curr_acc)
