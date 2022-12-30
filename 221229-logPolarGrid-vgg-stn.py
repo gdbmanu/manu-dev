@@ -312,7 +312,7 @@ def test(loader):
 
 
 lr = 1e-4
-LAMBDA = 1e-1
+LAMBDA = 1
 do_stn=True
 deterministic=False
 
@@ -341,12 +341,12 @@ acc = []
 loss = []
 kl_loss = []
 
-args.epochs = 300
+args.epochs = 30
 
 std_axe = np.linspace(1e-2, .3, args.epochs)
 
 for epoch in range(1, args.epochs + 1):
-    args.std_sched = std_axe[epoch]
+    args.std_sched = std_axe[epoch-1]
     train(epoch, dataloader['train'])
     curr_acc, curr_loss, curr_kl_loss = test(dataloader['test'])
     acc.append(curr_acc)
