@@ -204,9 +204,9 @@ class Grid_AttentionTransNet(nn.Module):
         grid = torch.cat((grid_xs, grid_ys), 3)
         grid = expand_dim(grid, 0, args.batch_size)
         
-        return grid    
+        return grid.to(device)    
 
-    def stn(self: object, x: torch.Tensor) -> Tuple[torch.Tensor]:
+    def stn(self, x):
     
         logPolx = F.grid_sample(x, self.where_grid)
         
@@ -293,7 +293,7 @@ def test(loader):
             # sum up batch loss
             #test_loss += F.nll_loss(output, target, size_average=False).item()
             test_loss += loss_func(output, target).item()
-            kl_loss += kl_divergence(model, z, mu, sigma).item()
+            kl_loss += kl_divergence(model, z).item()
             # get the index of the max log-probability
             #pred = output.max(1, keepdim=True)[1]
             pred = output.argmax(dim=1, keepdim=True)
@@ -305,22 +305,22 @@ def test(loader):
               format(test_loss, correct, len(dataloader['test'].dataset),
                      100. * correct / len(dataloader['test'].dataset),
                      kl_loss))
-        return correct / len(dataloader['test'].dataset)
+        return correct / len(dataloader['test'].dataset), test_loss, kl_loss
 
 
 # In[29]:
 
 
 lr = 1e-4
-LAMBDA = 1e-6
+LAMBDA = 1e-1
 do_stn=True
-deterministic=True
+deterministic=False
 
 
 # In[30]:
 
 
-device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
 #model = torch.load("../models/low_comp_polo_stn.pt")
 model = Grid_AttentionTransNet(do_stn=do_stn, deterministic=deterministic).to(device)
 
@@ -339,19 +339,23 @@ loss_func = nn.CrossEntropyLoss()
 
 acc = []
 loss = []
+kl_loss = []
 
 args.epochs = 300
 
+std_axe = np.linspace(1e-2, 1, args.epochs)
+
 for epoch in range(1, args.epochs + 1):
+    args.std_sched = std_axe[epoch]
     train(epoch, dataloader['train'])
     curr_acc, curr_loss, curr_kl_loss = test(dataloader['test'])
     acc.append(curr_acc)
     loss.append(curr_loss)
     kl_loss.append(curr_kl_loss)
-    torch.save(model, f"logPolarGrid_vgg_stn_{deterministic}.pt")
-    np.save(f"logPolarGrid_vgg_stn_{deterministic}_acc", acc)
-    np.save(f"logPolarGrid_vgg_stn_{deterministic}_loss", loss)
-    np.save(f"logPolarGrid_vgg_stn_{deterministic}_loss", kl_loss)
+    torch.save(model, f"logPolarGrid_vgg_stn_{deterministic}_{LAMBDA}_lin_sched.pt")
+    np.save(f"logPolarGrid_vgg_stn_{deterministic}_{LAMBDA}_lin_sched_acc", acc)
+    np.save(f"logPolarGrid_vgg_stn_{deterministic}_{LAMBDA}_lin_sched_loss", loss)
+    np.save(f"logPolarGrid_vgg_stn_{deterministic}_{LAMBDA}_lin_sched_loss", kl_loss)
 
 
 # In[ ]:
