@@ -343,7 +343,7 @@ kl_loss = []
 
 args.epochs = 300
 
-std_axe = np.linspace(1e-2, 1, args.epochs)
+std_axe = np.linspace(1e-2, .3, args.epochs)
 
 for epoch in range(1, args.epochs + 1):
     args.std_sched = std_axe[epoch]
