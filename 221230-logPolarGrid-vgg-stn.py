@@ -317,7 +317,7 @@ def test(loader):
 
 
 lr = 1e-4
-LAMBDA = 1
+LAMBDA = .3
 do_stn=True
 deterministic=True
 
@@ -325,7 +325,7 @@ deterministic=True
 # In[30]:
 
 
-device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
+device = torch.device("cuda:1" if torch.cuda.is_available() else "cpu")
 #model = torch.load("../models/low_comp_polo_stn.pt")
 model = Grid_AttentionTransNet(do_stn=do_stn, LAMBDA=LAMBDA, deterministic=deterministic).to(device)
 
@@ -346,7 +346,7 @@ acc = []
 loss = []
 kl_loss = []
 
-args.epochs = 30
+args.epochs = 300
 
 std_axe = np.linspace(1e-2, .3, args.epochs)
 
@@ -357,10 +357,10 @@ for epoch in range(args.epochs):
     acc.append(curr_acc)
     loss.append(curr_loss)
     kl_loss.append(curr_kl_loss)
-    torch.save(model, f"logPolarGrid_vgg_stn_lin_{deterministic}_{LAMBDA}_lin_sched.pt")
-    np.save(f"logPolarGrid_vgg_stn_lin_{deterministic}_{LAMBDA}_lin_sched_acc", acc)
-    np.save(f"logPolarGrid_vgg_stn_lin_{deterministic}_{LAMBDA}_lin_sched_loss", loss)
-    np.save(f"logPolarGrid_vgg_stn_lin_{deterministic}_{LAMBDA}_lin_sched_loss", kl_loss)
+    torch.save(model, f"logPolarGrid_vgg_stn_lin_{deterministic}_{LAMBDA}.pt")
+    np.save(f"logPolarGrid_vgg_stn_lin_{deterministic}_{LAMBDA}_acc", acc)
+    np.save(f"logPolarGrid_vgg_stn_lin_{deterministic}_{LAMBDA}_loss", loss)
+    np.save(f"logPolarGrid_vgg_stn_lin_{deterministic}_{LAMBDA}_kl_loss", kl_loss)
 
 
 # In[ ]:
