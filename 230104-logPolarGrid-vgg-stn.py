@@ -208,7 +208,7 @@ class Grid_AttentionTransNet(nn.Module):
                     self.q = torch.distributions.Normal(mu, .1 * torch.ones_like(mu))  
                     z = mu
                 else:
-                    logvar = self.logvar(y) + 3
+                    logvar = self.logvar(y) + 1
                     sigma = torch.exp(-logvar / 2)
                     self.q = torch.distributions.Normal(mu, sigma)      
                     z = self.q.rsample()
@@ -316,7 +316,6 @@ deterministic=True
 
 device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
 #model = torch.load("../models/low_comp_polo_stn.pt")
-model = Grid_AttentionTransNet(do_stn=do_stn, LAMBDA=LAMBDA, deterministic=deterministic).to(device)
 
 
 # In[ ]:
@@ -334,22 +333,24 @@ loss_func = nn.CrossEntropyLoss()
 
 
 
-args.epochs = 30
-log_std_min = -4
-log_std_max = -2
+#log_std_min = -4
+#log_std_max = -2
 
-std_axe = np.exp(np.linspace(log_std_min, log_std_max, args.epochs))
+#std_axe = np.exp(np.linspace(log_std_min, log_std_max, args.epochs))
 #std_axe = np.linspace(1e-2, .5, args.epochs)
 
-for LAMBDA in (1e-5, 1e-4, 1e-3, 1e-2, 0.1):
+for LAMBDA in (1e-4, 1e-3, 1e-2, 0.1):
     acc = []
     loss = []
     kl_loss = []
+    model = Grid_AttentionTransNet(do_stn=do_stn, LAMBDA=LAMBDA, deterministic=deterministic).to(device)
     optimizer = optim.Adam(model.fc_what.parameters(), lr=lr)
+    
     model.deterministic=False
     model.LAMBDA=0
+    args.epochs = 100
 
-    for epoch in range(10):
+    for epoch in range(args.epochs):
         args.std_sched = radius #std_axe[epoch]
         train(epoch, dataloader['train'])
         curr_acc, curr_loss, curr_kl_loss = test(dataloader['test'])
@@ -357,6 +358,7 @@ for LAMBDA in (1e-5, 1e-4, 1e-3, 1e-2, 0.1):
         loss.append(curr_loss)
         kl_loss.append(curr_kl_loss)
 
+    args.epochs = 100
     model.deterministic=deterministic
     model.LAMBDA=LAMBDA
     if deterministic:
