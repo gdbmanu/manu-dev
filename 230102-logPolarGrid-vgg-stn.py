@@ -180,11 +180,14 @@ class Grid_AttentionTransNet(nn.Module):
         ##  The where pathway        
         self.where_grid = self.logPolarGrid(0,-4)
         
+        fc_size = 1024
         self.where_num_features = self.vgg.classifier[0].in_features
-        n_features = torch.tensor(self.where_num_features, dtype=torch.float)
+        n_features = torch.tensor(fc_size, dtype=torch.float)
            
-        self.mu = nn.Linear(self.where_num_features, 2) #, bias=False)
-        self.logvar = nn.Linear(self.where_num_features, 2) #, bias=False)
+        self.where_fc1 = nn.Linear(self.where_num_features, fc_size) #, bias=False)
+        self.where_fc2 = nn.Linear(fc_size, fc_size) #, bias=False)
+        self.mu = nn.Linear(fc_size, 2) #, bias=False)
+        self.logvar = nn.Linear(fc_size, 2) #, bias=False)
         
         self.mu.weight.data /= torch.sqrt(n_features) 
         self.mu.bias.data /= torch.sqrt(n_features)
@@ -195,6 +198,7 @@ class Grid_AttentionTransNet(nn.Module):
         self.downscale = nn.Parameter(torch.tensor([[1, 0], [0, 1]],
                                                    dtype=torch.float),
                                       requires_grad=False)
+        self.dropout = torch.nn.Dropout()
     
     def logPolarGrid(self, a, b, base=2):
         rs = torch.logspace(a, b, args.image_size, base = base)
@@ -215,13 +219,16 @@ class Grid_AttentionTransNet(nn.Module):
 
     def stn(self: object, x: torch.Tensor) -> Tuple[torch.Tensor]:
     
-        logPolx = F.grid_sample(x, self.where_grid)
+        logPolx = x #F.grid_sample(x, self.where_grid)
         
         if self.do_stn:
             if True: #with torch.no_grad():
                 y = self.vgg_where_features(logPolx)
                 y = self.vgg_where_avgpool(y).view(-1, self.where_num_features)
-                
+                y = F.relu(self.where_fc1(y))
+                y = self.dropout(y)
+                y = F.relu(self.where_fc2(y))
+                y = self.dropout(y)
                 mu = self.mu(y)
                                    
                 if self.deterministic:
@@ -319,8 +326,8 @@ def test(loader):
 
 
 lr = 1e-4
-LAMBDA = 0.01
-radius= 0.3
+LAMBDA = 0.001
+radius= 0.1
 do_stn=True
 deterministic=False
 
@@ -328,7 +335,7 @@ deterministic=False
 # In[30]:
 
 
-device = torch.device("cuda:1" if torch.cuda.is_available() else "cpu")
+device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
 #model = torch.load("../models/low_comp_polo_stn.pt")
 model = Grid_AttentionTransNet(do_stn=do_stn, LAMBDA=LAMBDA, deterministic=deterministic).to(device)
 
@@ -350,30 +357,25 @@ loss = []
 kl_loss = []
 
 args.epochs = 300
-log_std_min = -3
-log_std_max = 0
+log_std_min = -4
+log_std_max = -2
 
 std_axe = np.exp(np.linspace(log_std_min, log_std_max, args.epochs))
 #std_axe = np.linspace(1e-2, .5, args.epochs)
 
 
 for epoch in range(args.epochs):
-    #args.std_sched = std_axe[epoch]
-    args.std_sched = radius #std_axe[epoch]
+    args.std_sched = std_axe[epoch]
     train(epoch, dataloader['train'])
     curr_acc, curr_loss, curr_kl_loss = test(dataloader['test'])
     acc.append(curr_acc)
     loss.append(curr_loss)
     kl_loss.append(curr_kl_loss)
-    torch.save(model, f"221231_logPolarGrid_vgg_stn_{deterministic}_{LAMBDA}_sched.pt")
-    np.save(f"221231_logPolarGrid_vgg_stn_{deterministic}_{LAMBDA}_sched_acc", acc)
-    np.save(f"221231_logPolarGrid_vgg_stn_{deterministic}_{LAMBDA}_sched_loss", loss)
-    np.save(f"221231_logPolarGrid_vgg_stn_{deterministic}_{LAMBDA}_sched_kl_loss", kl_loss)
     # SHRINK : (0,-3);(-3,-6) OVERLAP : (0,-4);(-2,-6)
-    #torch.save(model, f"221231_logPolarGrid_vgg_stn_{deterministic}_{LAMBDA}_{radius}_overlap.pt")
-    #np.save(f"221231_logPolarGrid_vgg_stn_{deterministic}_{LAMBDA}_{radius}_overlap_acc", acc)
-    #np.save(f"221231_logPolarGrid_vgg_stn_{deterministic}_{LAMBDA}_{radius}_overlap_loss", loss)
-    #np.save(f"221231_logPolarGrid_vgg_stn_{deterministic}_{LAMBDA}_{radius}_overlap_kl_loss", kl_loss)
+    torch.save(model, f"230103_logPolarGrid_vgg_stn_{deterministic}_{LAMBDA}_logsched_overlap.pt")
+    np.save(f"230103_logPolarGrid_vgg_stn_{deterministic}_{LAMBDA}_{radius}_logsched_acc", acc)
+    np.save(f"230103_logPolarGrid_vgg_stn_{deterministic}_{LAMBDA}_{radius}_logsched_loss", loss)
+    np.save(f"230103_logPolarGrid_vgg_stn_{deterministic}_{LAMBDA}_{radius}_logsched_kl_loss", kl_loss)
     #torch.save(model, f"221231_logPolarGrid_vgg_stn_{deterministic}_overlap_baseline.pt")
     #np.save(f"221231_logPolarGrid_vgg_stn_shrink_{deterministic}_overlap_baseline_acc", acc)
     #np.save(f"221231_logPolarGrid_vgg_stn_shrink_{deterministic}_overlap_baseline_loss", loss)
