@@ -37,7 +37,7 @@ from easydict import EasyDict as edict
 
 args = edict({})
 args.image_size = 240
-args.batch_size = 20
+args.batch_size = 25
 args.log_interval = 100
 args.std_sched = .3
 
@@ -147,7 +147,7 @@ class Grid_AttentionTransNet(nn.Module):
         #features.extend([nn.Linear(num_features, 500)]) # Add our layer
         self.vgg.classifier = nn.Sequential(*features) # Replace the model classifier
         
-        self.what_grid = self.logPolarGrid(-1,-4) 
+        self.what_grid = self.logPolarGrid(0,-4) 
         
         n_features = torch.tensor(self.num_features, dtype=torch.float)
         
@@ -161,7 +161,7 @@ class Grid_AttentionTransNet(nn.Module):
         #features.extend([nn.Linear(num_features, 500)]) # Add our layer
         self.vgg_where.classifier = nn.Sequential(*features) # Replace the model classifier
         
-        self.where_grid = self.logPolarGrid(0,-3)
+        self.where_grid = self.logPolarGrid(0,-4)
         
         self.mu = nn.Linear(self.num_features, 2) #, bias=False)
         self.logvar = nn.Linear(self.num_features, 2) #, bias=False)
@@ -236,7 +236,8 @@ class Grid_AttentionTransNet(nn.Module):
         x, theta, z = self.stn(x)
         
         logPolx = F.grid_sample(x, self.what_grid)
-        y = self.vgg(logPolx)  
+        if True: #with torch.no_grad():
+            y = self.vgg(logPolx)  
         y = self.fc_what(y)
        
         return y, theta, z
@@ -251,7 +252,7 @@ def train(epoch, loader):
         data, target = data.to(device, dtype=torch.float), target.to(device)
 
         optimizer.zero_grad()
-        stn_optimizer.zero_grad()
+        #stn_optimizer.zero_grad()
         output, theta, z = model(data)
         if model.do_stn : #and not model.deterministic:
             loss = loss_func(output, target) + kl_divergence(model, z)
@@ -259,12 +260,15 @@ def train(epoch, loader):
             loss = loss_func(output, target)
         loss.backward()
         optimizer.step()
-        stn_optimizer.step()
+        #stn_optimizer.step()
+        pred = output.argmax(dim=1, keepdim=True)
+        correct = pred.eq(target.view_as(pred)).sum().item()
         if True: #batch_idx % args.log_interval == 0:
             print('Train Epoch: {}/{} [{}/{} ({:.0f}%)]\tLoss: {:.6f}'.format(
                 epoch, args.epochs, batch_idx * len(data),
                 len(dataloader['train'].dataset),
                 100. * batch_idx / len(dataloader['train']), loss.item()))
+            print(f'Correct :{100 * correct / args.batch_size}')
 
 
 def test(loader):
@@ -301,10 +305,10 @@ def test(loader):
 
 
 lr = 1e-4
-LAMBDA = 0.001
+LAMBDA = 0 #0.001
 radius= 0.1
 do_stn=True
-deterministic=False
+deterministic=True
 
 
 # In[30]:
@@ -318,8 +322,9 @@ model = Grid_AttentionTransNet(do_stn=do_stn, LAMBDA=LAMBDA, deterministic=deter
 # In[ ]:
 
 
-optimizer = optim.Adam(model.fc_what.parameters(), lr=lr)
-stn_optimizer = optim.Adam(list(model.mu.parameters())+list(model.logvar.parameters()), lr=lr)
+#optimizer = optim.Adam(list(model.vgg.classifier.parameters())+list(model.fc_what.parameters()), lr=lr)
+#optimizer = optim.Adam(model.fc_what.parameters(), lr=lr)
+#stn_optimizer = optim.Adam(list(model.mu.parameters())+list(model.logvar.parameters()), lr=lr)
 #optimizer = optim.SGD(model.parameters(), lr=lr)
 loss_func = nn.CrossEntropyLoss()
 #scheduler = optim.lr_scheduler.StepLR(optimizer, step_size=10, gamma=0.9, last_epoch=-1) #, verbose=True)
@@ -329,17 +334,35 @@ loss_func = nn.CrossEntropyLoss()
 
 
 
-args.epochs = 100
+args.epochs = 30
 log_std_min = -4
 log_std_max = -2
 
 std_axe = np.exp(np.linspace(log_std_min, log_std_max, args.epochs))
 #std_axe = np.linspace(1e-2, .5, args.epochs)
 
-for LAMBDA in (1e-3, 1e-2, 0.1, 1):
+for LAMBDA in (1e-5, 1e-4, 1e-3, 1e-2, 0.1):
     acc = []
     loss = []
     kl_loss = []
+    optimizer = optim.Adam(model.fc_what.parameters(), lr=lr)
+    model.deterministic=False
+    model.LAMBDA=0
+
+    for epoch in range(10):
+        args.std_sched = radius #std_axe[epoch]
+        train(epoch, dataloader['train'])
+        curr_acc, curr_loss, curr_kl_loss = test(dataloader['test'])
+        acc.append(curr_acc)
+        loss.append(curr_loss)
+        kl_loss.append(curr_kl_loss)
+
+    model.deterministic=deterministic
+    model.LAMBDA=LAMBDA
+    if deterministic:
+        optimizer = optim.Adam(model.mu.parameters(), lr=lr)
+    else:
+        optimizer = optim.Adam(list(model.mu.parameters())+list(model.logvar.parameters()), lr=lr)
     for epoch in range(args.epochs):
         args.std_sched = radius #std_axe[epoch]
         train(epoch, dataloader['train'])
@@ -348,13 +371,13 @@ for LAMBDA in (1e-3, 1e-2, 0.1, 1):
         loss.append(curr_loss)
         kl_loss.append(curr_kl_loss)
         # SHRINK : (0,-3);(-3,-6) OVERLAP : (0,-4);(-2,-6)
-        torch.save(model, f"230104_logPolarGrid_vgg_stn_{deterministic}_{LAMBDA}_{radius}.pt")
-        np.save(f"230104_logPolarGrid_vgg_stn_{deterministic}_{LAMBDA}_{radius}_acc", acc)
-        np.save(f"230104_logPolarGrid_vgg_stn_{deterministic}_{LAMBDA}_{radius}_loss", loss)
-        np.save(f"230104_logPolarGrid_vgg_stn_{deterministic}_{LAMBDA}_{radius}_kl_loss", kl_loss)
-        #torch.save(model, f"230103_logPolarGrid_vgg_stn_{deterministic}_baseline.pt")
-        #np.save(f"230103_logPolarGrid_vgg_stn_{deterministic}_baseline_acc", acc)
-        #np.save(f"230103_logPolarGrid_vgg_stn_{deterministic}_baseline_loss", loss)
+        torch.save(model, f"230104_logPolarGrid_vgg_stn_wide_{deterministic}_{LAMBDA}_{radius}.pt")
+        np.save(f"230104_logPolarGrid_vgg_stn_wide_{deterministic}_{LAMBDA}_{radius}_acc", acc)
+        np.save(f"230104_logPolarGrid_vgg_stn_wide_{deterministic}_{LAMBDA}_{radius}_loss", loss)
+        np.save(f"230104_logPolarGrid_vgg_stn_wide_{deterministic}_{LAMBDA}_{radius}_kl_loss", kl_loss)
+        #torch.save(model, f"230104_logPolarGrid_vgg_stn_{deterministic}_baseline.pt")
+        #np.save(f"230104_logPolarGrid_wide_vgg_stn_{deterministic}_baseline_acc", acc)
+        #np.save(f"230104_logPolarGrid_wide_vgg_stn_{deterministic}_baseline_loss", loss)
 
 
 # In[ ]:

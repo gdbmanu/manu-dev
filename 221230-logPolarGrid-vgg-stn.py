@@ -317,7 +317,7 @@ def test(loader):
 
 
 lr = 1e-4
-LAMBDA = 1
+LAMBDA = .3
 do_stn=True
 deterministic=False
 
@@ -325,7 +325,7 @@ deterministic=False
 # In[30]:
 
 
-device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
+device = torch.device("cuda:1" if torch.cuda.is_available() else "cpu")
 #model = torch.load("../models/low_comp_polo_stn.pt")
 model = Grid_AttentionTransNet(do_stn=do_stn, LAMBDA=LAMBDA, deterministic=deterministic).to(device)
 

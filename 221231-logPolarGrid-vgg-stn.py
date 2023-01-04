@@ -328,7 +328,7 @@ deterministic=False
 # In[30]:
 
 
-device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
+device = torch.device("cuda:1" if torch.cuda.is_available() else "cpu")
 #model = torch.load("../models/low_comp_polo_stn.pt")
 model = Grid_AttentionTransNet(do_stn=do_stn, LAMBDA=LAMBDA, deterministic=deterministic).to(device)
 
@@ -358,17 +358,22 @@ std_axe = np.exp(np.linspace(log_std_min, log_std_max, args.epochs))
 
 
 for epoch in range(args.epochs):
+    #args.std_sched = std_axe[epoch]
     args.std_sched = radius #std_axe[epoch]
     train(epoch, dataloader['train'])
     curr_acc, curr_loss, curr_kl_loss = test(dataloader['test'])
     acc.append(curr_acc)
     loss.append(curr_loss)
     kl_loss.append(curr_kl_loss)
+    torch.save(model, f"221231_logPolarGrid_vgg_stn_{deterministic}_{LAMBDA}_sched.pt")
+    np.save(f"221231_logPolarGrid_vgg_stn_{deterministic}_{LAMBDA}_sched_acc", acc)
+    np.save(f"221231_logPolarGrid_vgg_stn_{deterministic}_{LAMBDA}_sched_loss", loss)
+    np.save(f"221231_logPolarGrid_vgg_stn_{deterministic}_{LAMBDA}_sched_kl_loss", kl_loss)
     # SHRINK : (0,-3);(-3,-6) OVERLAP : (0,-4);(-2,-6)
-    torch.save(model, f"221231_logPolarGrid_vgg_stn_{deterministic}_{LAMBDA}_{radius}_overlap.pt")
-    np.save(f"221231_logPolarGrid_vgg_stn_{deterministic}_{LAMBDA}_{radius}_overlap_acc", acc)
-    np.save(f"221231_logPolarGrid_vgg_stn_{deterministic}_{LAMBDA}_{radius}_overlap_loss", loss)
-    np.save(f"221231_logPolarGrid_vgg_stn_{deterministic}_{LAMBDA}_{radius}_overlap_kl_loss", kl_loss)
+    #torch.save(model, f"221231_logPolarGrid_vgg_stn_{deterministic}_{LAMBDA}_{radius}_overlap.pt")
+    #np.save(f"221231_logPolarGrid_vgg_stn_{deterministic}_{LAMBDA}_{radius}_overlap_acc", acc)
+    #np.save(f"221231_logPolarGrid_vgg_stn_{deterministic}_{LAMBDA}_{radius}_overlap_loss", loss)
+    #np.save(f"221231_logPolarGrid_vgg_stn_{deterministic}_{LAMBDA}_{radius}_overlap_kl_loss", kl_loss)
     #torch.save(model, f"221231_logPolarGrid_vgg_stn_{deterministic}_overlap_baseline.pt")
     #np.save(f"221231_logPolarGrid_vgg_stn_shrink_{deterministic}_overlap_baseline_acc", acc)
     #np.save(f"221231_logPolarGrid_vgg_stn_shrink_{deterministic}_overlap_baseline_loss", loss)
