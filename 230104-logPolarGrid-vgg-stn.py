@@ -336,7 +336,7 @@ log_std_max = -2
 std_axe = np.exp(np.linspace(log_std_min, log_std_max, args.epochs))
 #std_axe = np.linspace(1e-2, .5, args.epochs)
 
-for LAMBDA in (1e-5, 1e-4, 1e-3, 1e-2, 0.1, 1):
+for LAMBDA in (1e-3, 1e-2, 0.1, 1):
     acc = []
     loss = []
     kl_loss = []
