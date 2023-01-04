@@ -6,7 +6,7 @@
 
 import numpy as np
 import matplotlib.pyplot as plt
-
+import copy
 
 # In[2]:
 
@@ -37,7 +37,7 @@ from easydict import EasyDict as edict
 
 args = edict({})
 args.image_size = 240
-args.batch_size = 50
+args.batch_size = 20
 args.log_interval = 100
 args.std_sched = .3
 
@@ -159,6 +159,8 @@ class Grid_AttentionTransNet(nn.Module):
         self.LAMBDA = LAMBDA
         
         self.vgg = models.vgg16(pretrained=True) 
+        self.vgg_where_features = copy.deepcopy(models.vgg16(pretrained=True).features) 
+        self.vgg_where_avgpool = copy.deepcopy(models.vgg16(pretrained=True).avgpool) 
         
         ##  The what pathway
         
@@ -167,7 +169,7 @@ class Grid_AttentionTransNet(nn.Module):
         #features.extend([nn.Linear(num_features, 500)]) # Add our layer
         self.vgg.classifier = nn.Sequential(*features) # Replace the model classifier
         
-        self.what_grid = self.logPolarGrid(-3,-6) 
+        self.what_grid = self.logPolarGrid(-2,-5) 
         
         n_features = torch.tensor(self.num_features, dtype=torch.float)
         
@@ -216,10 +218,9 @@ class Grid_AttentionTransNet(nn.Module):
         logPolx = F.grid_sample(x, self.where_grid)
         
         if self.do_stn:
-            
-            with torch.no_grad():
-                y = self.vgg.features(logPolx)
-                y = self.vgg.avgpool(y).view(-1, self.where_num_features)
+            if True: #with torch.no_grad():
+                y = self.vgg_where_features(logPolx)
+                y = self.vgg_where_avgpool(y).view(-1, self.where_num_features)
                 
             mu = self.mu(y)
                                    
@@ -317,7 +318,7 @@ def test(loader):
 
 
 lr = 1e-4
-LAMBDA = .3
+LAMBDA = 1
 do_stn=True
 deterministic=False
 
@@ -351,16 +352,16 @@ args.epochs = 300
 std_axe = np.linspace(1e-2, .5, args.epochs)
 
 for epoch in range(args.epochs):
-    args.std_sched = 0.3 #std_axe[epoch]
+    args.std_sched = std_axe[epoch]
     train(epoch, dataloader['train'])
     curr_acc, curr_loss, curr_kl_loss = test(dataloader['test'])
     acc.append(curr_acc)
     loss.append(curr_loss)
     kl_loss.append(curr_kl_loss)
-    torch.save(model, f"logPolarGrid_vgg_stn_{deterministic}_{LAMBDA}_shrink.pt")
-    np.save(f"logPolarGrid_vgg_stn_{deterministic}_{LAMBDA}_shrink_acc", acc)
-    np.save(f"logPolarGrid_vgg_stn_{deterministic}_{LAMBDA}_shrink_loss", loss)
-    np.save(f"logPolarGrid_vgg_stn_{deterministic}_{LAMBDA}_shrink_kl_loss", kl_loss)
+    torch.save(model, f"221231_logPolarGrid_vgg_stn_{deterministic}_{LAMBDA}_sched.pt")
+    np.save(f"221231_logPolarGrid_vgg_stn_{deterministic}_{LAMBDA}_sched_acc", acc)
+    np.save(f"221231_logPolarGrid_vgg_stn_{deterministic}_{LAMBDA}_sched_loss", loss)
+    np.save(f"221231_logPolarGrid_vgg_stn_{deterministic}_{LAMBDA}_sched_kl_loss", kl_loss)
 
 
 # In[ ]:
