@@ -37,7 +37,7 @@ from easydict import EasyDict as edict
 
 args = edict({})
 args.image_size = 240
-args.batch_size = 20
+args.batch_size = 10
 args.log_interval = 100
 args.std_sched = .3
 
@@ -96,27 +96,6 @@ dataloader = { 'train' : torch.utils.data.DataLoader(
              }
 
 
-# In[10]:
-
-
-data, label = next(iter(dataloader['train']))
-
-
-# In[11]:
-
-
-data.shape
-
-
-# In[12]:
-
-
-from utils import view_data
-original = view_data(data, label, 5)
-
-
-# In[13]:
-
 
 def expand_dim(tensor, dim, desired_dim_len):
     sz = list(tensor.size())
@@ -159,8 +138,7 @@ class Grid_AttentionTransNet(nn.Module):
         self.LAMBDA = LAMBDA
         
         self.vgg = models.vgg16(pretrained=True) 
-        self.vgg_where_features = copy.deepcopy(models.vgg16(pretrained=True).features) 
-        self.vgg_where_avgpool = copy.deepcopy(models.vgg16(pretrained=True).avgpool) 
+        self.vgg_where = models.vgg16(pretrained=True) 
         
         ##  The what pathway
         
@@ -169,7 +147,7 @@ class Grid_AttentionTransNet(nn.Module):
         #features.extend([nn.Linear(num_features, 500)]) # Add our layer
         self.vgg.classifier = nn.Sequential(*features) # Replace the model classifier
         
-        self.what_grid = self.logPolarGrid(-2,-6) 
+        self.what_grid = self.logPolarGrid(-1,-4) 
         
         n_features = torch.tensor(self.num_features, dtype=torch.float)
         
@@ -178,13 +156,15 @@ class Grid_AttentionTransNet(nn.Module):
         self.fc_what.bias.data /= torch.sqrt(n_features)
 
         ##  The where pathway        
-        self.where_grid = self.logPolarGrid(0,-4)
+        self.num_features = self.vgg_where.classifier[-1].in_features
+        features = list(self.vgg_where.classifier.children())[:-1] # Remove last layer
+        #features.extend([nn.Linear(num_features, 500)]) # Add our layer
+        self.vgg_where.classifier = nn.Sequential(*features) # Replace the model classifier
         
-        self.where_num_features = self.vgg.classifier[0].in_features
-        n_features = torch.tensor(self.where_num_features, dtype=torch.float)
-           
-        self.mu = nn.Linear(self.where_num_features, 2) #, bias=False)
-        self.logvar = nn.Linear(self.where_num_features, 2) #, bias=False)
+        self.where_grid = self.logPolarGrid(0,-3)
+        
+        self.mu = nn.Linear(self.num_features, 2) #, bias=False)
+        self.logvar = nn.Linear(self.num_features, 2) #, bias=False)
         
         self.mu.weight.data /= torch.sqrt(n_features) 
         self.mu.bias.data /= torch.sqrt(n_features)
@@ -195,6 +175,7 @@ class Grid_AttentionTransNet(nn.Module):
         self.downscale = nn.Parameter(torch.tensor([[1, 0], [0, 1]],
                                                    dtype=torch.float),
                                       requires_grad=False)
+        self.dropout = torch.nn.Dropout()
     
     def logPolarGrid(self, a, b, base=2):
         rs = torch.logspace(a, b, args.image_size, base = base)
@@ -215,17 +196,16 @@ class Grid_AttentionTransNet(nn.Module):
 
     def stn(self: object, x: torch.Tensor) -> Tuple[torch.Tensor]:
     
-        logPolx = F.grid_sample(x, self.where_grid)
+        logPolx = x #F.grid_sample(x, self.where_grid)
         
         if self.do_stn:
-            if True: #with torch.no_grad():
-                y = self.vgg_where_features(logPolx)
-                y = self.vgg_where_avgpool(y).view(-1, self.where_num_features)
-                
+            if True: #
+                with torch.no_grad():
+                    y = self.vgg_where(logPolx)
                 mu = self.mu(y)
                                    
                 if self.deterministic:
-                    self.q = torch.distributions.Normal(mu, .3 * torch.ones_like(mu))  
+                    self.q = torch.distributions.Normal(mu, .1 * torch.ones_like(mu))  
                     z = mu
                 else:
                     logvar = self.logvar(y) + 3
@@ -320,7 +300,7 @@ def test(loader):
 
 lr = 1e-4
 LAMBDA = 0.01
-radius= 0.3
+radius= 0.1
 do_stn=True
 deterministic=False
 
@@ -350,8 +330,8 @@ loss = []
 kl_loss = []
 
 args.epochs = 300
-log_std_min = -3
-log_std_max = 0
+log_std_min = -4
+log_std_max = -2
 
 std_axe = np.exp(np.linspace(log_std_min, log_std_max, args.epochs))
 #std_axe = np.linspace(1e-2, .5, args.epochs)
@@ -365,13 +345,13 @@ for epoch in range(args.epochs):
     loss.append(curr_loss)
     kl_loss.append(curr_kl_loss)
     # SHRINK : (0,-3);(-3,-6) OVERLAP : (0,-4);(-2,-6)
-    torch.save(model, f"221231_logPolarGrid_vgg_stn_{deterministic}_{LAMBDA}_{radius}_overlap.pt")
-    np.save(f"221231_logPolarGrid_vgg_stn_{deterministic}_{LAMBDA}_{radius}_overlap_acc", acc)
-    np.save(f"221231_logPolarGrid_vgg_stn_{deterministic}_{LAMBDA}_{radius}_overlap_loss", loss)
-    np.save(f"221231_logPolarGrid_vgg_stn_{deterministic}_{LAMBDA}_{radius}_overlap_kl_loss", kl_loss)
-    #torch.save(model, f"221231_logPolarGrid_vgg_stn_{deterministic}_overlap_baseline.pt")
-    #np.save(f"221231_logPolarGrid_vgg_stn_shrink_{deterministic}_overlap_baseline_acc", acc)
-    #np.save(f"221231_logPolarGrid_vgg_stn_shrink_{deterministic}_overlap_baseline_loss", loss)
+    torch.save(model, f"230103_logPolarGrid_vgg_stn_{deterministic}_{LAMBDA}_{radius}.pt")
+    np.save(f"230103_logPolarGrid_vgg_stn_{deterministic}_{LAMBDA}_{radius}_acc", acc)
+    np.save(f"230103_logPolarGrid_vgg_stn_{deterministic}_{LAMBDA}_{radius}_loss", loss)
+    np.save(f"230103_logPolarGrid_vgg_stn_{deterministic}_{LAMBDA}_{radius}_kl_loss", kl_loss)
+    #torch.save(model, f"230103_logPolarGrid_vgg_stn_{deterministic}_baseline.pt")
+    #np.save(f"230103_logPolarGrid_vgg_stn_{deterministic}_baseline_acc", acc)
+    #np.save(f"230103_logPolarGrid_vgg_stn_{deterministic}_baseline_loss", loss)
 
 
 # In[ ]:
