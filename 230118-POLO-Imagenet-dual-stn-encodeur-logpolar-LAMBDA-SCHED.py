@@ -209,7 +209,7 @@ width,base_levels, color, n_levels
 # In[17]:
 
 
-image_path = "../data/animal/"
+image_path = "D:/Data/animal/"
 
 image_dataset = { 'train' : datasets.ImageFolder(
                             image_path+'train', 
@@ -234,16 +234,16 @@ dataset_size['train'], dataset_size['test']
 # In[19]:
 
 
-batch_size = 50
+args.batch_size = 50
 num_workers = 1
 
 dataloader = { 'train' : torch.utils.data.DataLoader(
-                            image_dataset['train'], batch_size=batch_size,
+                            image_dataset['train'], batch_size=args.batch_size,
                             shuffle=True, 
                             num_workers=num_workers,
                         ),
                'test' : torch.utils.data.DataLoader(
-                            image_dataset['test'], batch_size=batch_size,
+                            image_dataset['test'], batch_size=args.batch_size,
                             shuffle=True, 
                             num_workers=num_workers,
                         )
@@ -292,10 +292,12 @@ def kl_divergence(model, z, mu, std):
 
 class Polo_AttentionTransNet(nn.Module):
     
-    def __init__(self, do_stn=True, LAMBDA=.1):
+    def __init__(self, do_stn=True, do_what=False, LAMBDA=.1):
         super(Polo_AttentionTransNet, self).__init__()
         
         self.do_stn = do_stn
+        self.do_what = do_what
+        
         self.LAMBDA = LAMBDA
 
         ##  The what pathway
@@ -358,7 +360,7 @@ class Polo_AttentionTransNet(nn.Module):
             #theta = F.sigmoid(self.loc4(xs)) - 0.5
             #theta = self.loc4(xs)
             mu = self.mu(xs)
-            logvar = self.logvar(xs) + 3
+            logvar = self.logvar(xs) + 1
             sigma = torch.exp(-logvar / 2)
             self.q = torch.distributions.Normal(mu, sigma)
             z = self.q.rsample()
@@ -372,16 +374,32 @@ class Polo_AttentionTransNet(nn.Module):
             x = F.grid_sample(x, grid)
 
         else:
-            theta = nn.Parameter(torch.tensor([[1, 0, 0], [0, 1, 0]],
-                                                   dtype=torch.float),
-                                      requires_grad=False)
-            theta = theta.unsqueeze(0).repeat(x.size()[0], 1, 1)
-            z = torch.tensor([0, 0],dtype=torch.float)
-            z = z.unsqueeze(0).repeat(x.size()[0], 1)
-            mu = torch.tensor([0, 0],dtype=torch.float)
+            mu = torch.tensor([0, 0],dtype=torch.double)
             mu = mu.unsqueeze(0).repeat(x.size()[0], 1)   
-            sigma = torch.tensor([1, 1],dtype=torch.float)
-            sigma = sigma.unsqueeze(0).repeat(x.size()[0], 1)      
+            sigma = torch.tensor([1, 1],dtype=torch.double)
+            sigma = sigma.unsqueeze(0).repeat(x.size()[0], 1)    
+            
+            if self.do_what:
+                self.q = torch.distributions.Normal(mu, 0.3*sigma)
+                z = self.q.rsample()
+                print(z[0,...])
+                theta = torch.cat((self.downscale.unsqueeze(0).repeat(
+                                z.size(0), 1, 1), z.unsqueeze(2)),
+                                  dim=2)
+        
+                grid_size = torch.Size([x.size()[0], x.size()[1], 256, 256])
+                grid = F.affine_grid(theta, grid_size)
+                x = F.grid_sample(x, grid)
+            else:
+                z = torch.tensor([0, 0],dtype=torch.float)
+                z = z.unsqueeze(0).repeat(x.size()[0], 1)
+
+                theta = nn.Parameter(torch.tensor([[1, 0, 0], [0, 1, 0]],
+                                                    dtype=torch.float),
+                                        requires_grad=False)
+                theta = theta.unsqueeze(0).repeat(x.size()[0], 1, 1)
+            
+              
         return x, theta, z, mu, sigma
 
     def forward(self, x, x_polo):
@@ -392,7 +410,7 @@ class Polo_AttentionTransNet(nn.Module):
         
             w_x_polo ={'in': torch.zeros_like(x_polo['in']),
                        'out': torch.zeros_like(x_polo['out'])}
-            for i in range(batch_size):
+            for i in range(args.batch_size):
                 d, w = transform_in(x[i,...])
                 w_x_polo['in'][i,...] = w['in']
                 w_x_polo['out'][i,...] = w['out']
@@ -444,12 +462,15 @@ def train(epoch, loader):
             loss = loss_func(output, target)
         loss.backward()
         optimizer.step()
+        pred = output.argmax(dim=1, keepdim=True)
+        correct = pred.eq(target.view_as(pred)).sum().item()
         if True: #batch_idx % args.log_interval == 0:
-            print(f"KL loss : {kl_divergence(model, z, mu, sigma).item()}")
             print('Train Epoch: {}/{} [{}/{} ({:.0f}%)]\tLoss: {:.6f}'.format(
-                epoch, args.epochs, batch_idx * len(data_original),
+                epoch, args.epochs, batch_idx * len(data),
                 len(dataloader['train'].dataset),
                 100. * batch_idx / len(dataloader['train']), loss.item()))
+            print(f'Correct :{100 * correct / args.batch_size}')
+
 
 
 def test(loader):
@@ -493,50 +514,77 @@ lr = 1e-4
 LAMBDA = 3e-5
 
 # In[33]:
+if __name__ == '__main__':
 
 
-device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-#model = torch.load("../models/low_comp_polo_stn.pt")
-model = Polo_AttentionTransNet(LAMBDA=LAMBDA).to(device)
+    device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+    #model = torch.load("../models/low_comp_polo_stn.pt")
+    model = Polo_AttentionTransNet(LAMBDA=LAMBDA).to(device)
 
 
-# In[34]:
+    # In[34]:
 
 
-optimizer = optim.Adam(model.parameters(), lr=lr)
-#optimizer = optim.SGD(model.parameters(), lr=lr)
-loss_func = nn.CrossEntropyLoss()
-#scheduler = optim.lr_scheduler.StepLR(optimizer, step_size=10, gamma=0.9, last_epoch=-1) #, verbose=True)
+    optimizer = optim.Adam(model.parameters(), lr=lr)
+    #optimizer = optim.SGD(model.parameters(), lr=lr)
+    loss_func = nn.CrossEntropyLoss()
+    #scheduler = optim.lr_scheduler.StepLR(optimizer, step_size=10, gamma=0.9, last_epoch=-1) #, verbose=True)
 
 
-# In[35]:
+    # In[35]:
 
 
-acc = []
-loss = []
-kl_loss = []
+    acc = []
+    loss = []
+    kl_loss = []
 
-args.epochs = 1000
-model.do_stn = True
-log_std_min = -6
-log_std_max = -1
-std_axe = np.exp(np.linspace(log_std_min, log_std_max, args.epochs))
+    args.epochs = 1000
+    args.radius = 0.1
 
-#std_axe = np.linspace(1e-6, 1, args.epochs)
+    model.do_stn = True
+    log_std_min = -6
+    log_std_max = -1
+    std_axe = np.exp(np.linspace(log_std_min, log_std_max, args.epochs))
 
-for epoch in range(args.epochs):
-    args.std_sched = std_axe[epoch]
-    train(epoch, dataloader['train'])
-    curr_acc, curr_loss, curr_kl_loss = test(dataloader['test'])
-    acc.append(curr_acc)
-    loss.append(curr_loss)
-    kl_loss.append(curr_kl_loss)
-    torch.save(model, f"low_comp_polo_stn_dual_lambda_{LAMBDA}_sched.pt")
-    np.save(f"low_comp_polo_stn_dual_lambda_{LAMBDA}_sched_acc", acc)
-    np.save(f"low_comp_polo_stn_dual_lambda_{LAMBDA}_sched_loss", loss)
-    np.save(f"low_comp_polo_stn_dual_lambda_{LAMBDA}_sched_kl_loss", kl_loss)
+    #std_axe = np.linspace(1e-6, 1, args.epochs)
 
-model.cpu()
-torch.cuda.empty_cache()
+    for epoch in range(args.epochs):
+
+        args.std_sched = args.radius
+        if epoch == 0:
+            model.do_stn=False
+            model.do_what=True
+        else:
+            model.do_stn=True
+            model.do_what=False
+            params = []
+            if epoch % 2 == 1:
+                params.extend(list(model.loc1.parameters()))
+                params.extend(list(model.loc2a.parameters()))
+                params.extend(list(model.loc2b.parameters()))
+                params.extend(list(model.loc3.parameters()))
+                params.extend(list(model.mu.parameters()))
+                params.extend(list(model.logvar.parameters()))
+            else:
+                params.extend(list(model.wloc1.parameters()))
+                params.extend(list(model.wloc2a.parameters()))
+                params.extend(list(model.wloc2b.parameters()))
+                params.extend(list(model.wloc3.parameters()))
+                params.extend(list(model.wloc4.parameters()))
+
+            optimizer = optim.Adam(params, lr=lr)
+
+        train(epoch, dataloader['train'])
+        curr_acc, curr_loss, curr_kl_loss = test(dataloader['test'])
+        acc.append(curr_acc)
+        loss.append(curr_loss)
+        kl_loss.append(curr_kl_loss)
+        torch.save(model, f"low_comp_polo_stn_dual_lambda_{LAMBDA}_sched.pt")
+        np.save(f"low_comp_polo_stn_dual_lambda_{LAMBDA}_sched_acc", acc)
+        np.save(f"low_comp_polo_stn_dual_lambda_{LAMBDA}_sched_loss", loss)
+        np.save(f"low_comp_polo_stn_dual_lambda_{LAMBDA}_sched_kl_loss", kl_loss)
+
+    model.cpu()
+    torch.cuda.empty_cache()
 
 
