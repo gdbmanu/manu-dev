@@ -209,7 +209,8 @@ width,base_levels, color, n_levels
 # In[17]:
 
 
-image_path = "D:/Data/animal/"
+#image_path = "/envau/work/brainets/dauce.e/data/animal/"
+image_path = "../data/animal/"
 
 image_dataset = { 'train' : datasets.ImageFolder(
                             image_path+'train', 
@@ -362,7 +363,8 @@ class Polo_AttentionTransNet(nn.Module):
             #theta = self.loc4(xs)
             mu = self.mu(xs)
             if self.deterministic:
-                self.q = torch.distributions.Normal(mu, .1 * torch.ones_like(mu))  
+                sigma = .1 * torch.ones_like(mu)  
+                self.q = torch.distributions.Normal(mu, sigma)  
                 z = mu
             else:
                 logvar = self.logvar(xs) + 1
@@ -474,7 +476,7 @@ def train(epoch, loader):
             print('Train Epoch: {}/{} [{}/{} ({:.0f}%)]\tLoss: {:.6f}'.format(
                 epoch, args.epochs, batch_idx * args.batch_size,
                 len(dataloader['train'].dataset),
-                100. * batch_idx * args.batch_size / len(dataloader['train']), loss.item()))
+                100. * batch_idx / len(dataloader['train']), loss.item()))
             print(f'Correct :{100 * correct / args.batch_size}')
 
 
@@ -558,28 +560,25 @@ if __name__ == '__main__':
     for epoch in range(args.epochs):
 
         args.std_sched = args.radius
-        if epoch == 0:
-            model.do_stn=False
-            model.do_what=True
+        
+        model.do_stn=True
+        model.do_what=False
+        params = []
+        if epoch % 2 == 1:
+            params.extend(list(model.loc1.parameters()))
+            params.extend(list(model.loc2a.parameters()))
+            params.extend(list(model.loc2b.parameters()))
+            params.extend(list(model.loc3.parameters()))
+            params.extend(list(model.mu.parameters()))
+            params.extend(list(model.logvar.parameters()))
         else:
-            model.do_stn=True
-            model.do_what=False
-            params = []
-            if epoch % 2 == 1:
-                params.extend(list(model.loc1.parameters()))
-                params.extend(list(model.loc2a.parameters()))
-                params.extend(list(model.loc2b.parameters()))
-                params.extend(list(model.loc3.parameters()))
-                params.extend(list(model.mu.parameters()))
-                params.extend(list(model.logvar.parameters()))
-            else:
-                params.extend(list(model.wloc1.parameters()))
-                params.extend(list(model.wloc2a.parameters()))
-                params.extend(list(model.wloc2b.parameters()))
-                params.extend(list(model.wloc3.parameters()))
-                params.extend(list(model.wloc4.parameters()))
+            params.extend(list(model.wloc1.parameters()))
+            params.extend(list(model.wloc2a.parameters()))
+            params.extend(list(model.wloc2b.parameters()))
+            params.extend(list(model.wloc3.parameters()))
+            params.extend(list(model.wloc4.parameters()))
 
-            optimizer = optim.Adam(params, lr=lr)
+        optimizer = optim.Adam(params, lr=lr)
 
         train(epoch, dataloader['train'])
         curr_acc, curr_loss, curr_kl_loss = test(dataloader['test'])
