@@ -209,7 +209,7 @@ width,base_levels, color, n_levels
 # In[17]:
 
 
-image_path = "D:/Data/animal/"
+image_path = "../data/animal/"
 
 image_dataset = { 'train' : datasets.ImageFolder(
                             image_path+'train', 
@@ -521,6 +521,8 @@ if __name__ == '__main__':
     #model = torch.load("../models/low_comp_polo_stn.pt")
     model = Polo_AttentionTransNet(LAMBDA=LAMBDA).to(device)
 
+    model.do_stn=False
+    model.do_what=True
 
     # In[34]:
 
@@ -551,28 +553,23 @@ if __name__ == '__main__':
     for epoch in range(args.epochs):
 
         args.std_sched = args.radius
-        if epoch == 0:
-            model.do_stn=False
-            model.do_what=True
+            
+        params = []
+        if epoch % 2 == 1:
+            params.extend(list(model.loc1.parameters()))
+            params.extend(list(model.loc2a.parameters()))
+            params.extend(list(model.loc2b.parameters()))
+            params.extend(list(model.loc3.parameters()))
+            params.extend(list(model.mu.parameters()))
+            params.extend(list(model.logvar.parameters()))
         else:
-            model.do_stn=True
-            model.do_what=False
-            params = []
-            if epoch % 2 == 1:
-                params.extend(list(model.loc1.parameters()))
-                params.extend(list(model.loc2a.parameters()))
-                params.extend(list(model.loc2b.parameters()))
-                params.extend(list(model.loc3.parameters()))
-                params.extend(list(model.mu.parameters()))
-                params.extend(list(model.logvar.parameters()))
-            else:
-                params.extend(list(model.wloc1.parameters()))
-                params.extend(list(model.wloc2a.parameters()))
-                params.extend(list(model.wloc2b.parameters()))
-                params.extend(list(model.wloc3.parameters()))
-                params.extend(list(model.wloc4.parameters()))
+            params.extend(list(model.wloc1.parameters()))
+            params.extend(list(model.wloc2a.parameters()))
+            params.extend(list(model.wloc2b.parameters()))
+            params.extend(list(model.wloc3.parameters()))
+            params.extend(list(model.wloc4.parameters()))
 
-            optimizer = optim.Adam(params, lr=lr)
+        optimizer = optim.Adam(params, lr=lr)
 
         train(epoch, dataloader['train'])
         curr_acc, curr_loss, curr_kl_loss = test(dataloader['test'])
