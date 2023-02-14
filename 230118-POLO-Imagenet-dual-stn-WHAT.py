@@ -173,7 +173,7 @@ transform_big =  transforms.Compose([
 
 
 
-image_path = "data/animal/"
+image_path = "D:/Data/animal/"
 
 image_dataset = { 'train' : datasets.ImageFolder(
                             image_path+'train', 
@@ -195,16 +195,16 @@ dataset_size['train'], dataset_size['test']
 
 
 
-batch_size = 50
+args.batch_size = 50
 num_workers = 1
 
 dataloader = { 'train' : torch.utils.data.DataLoader(
-                            image_dataset['train'], batch_size=batch_size,
+                            image_dataset['train'], batch_size=args.batch_size,
                             shuffle=True, 
                             num_workers=num_workers,
                         ),
                'test' : torch.utils.data.DataLoader(
-                            image_dataset['test'], batch_size=batch_size,
+                            image_dataset['test'], batch_size=args.batch_size,
                             shuffle=True, 
                             num_workers=num_workers,
                         )
@@ -392,7 +392,10 @@ class Polo_AttentionTransNet(nn.Module):
         #print(xsb.shape)
 
         y = torch.cat((ya, yb), dim=1)
-        y = F.relu(self.wloc3(y.view(-1, (50+100) * (n_levels['in']-1) * n_eccentricity['in'] // 2 * n_azimuth['in'] // 2)))
+        y = y.view(-1, (50+100) * (n_levels['in']-1) * n_eccentricity['in'] // 2 * n_azimuth['in'] // 2)
+        y = nn.Dropout(0.5)(y)
+        y = F.relu(self.wloc3(y))
+        #y = nn.Dropout(0.5)(y)
         y = self.wloc4(y)
         return y, theta, z, mu, sigma
 
@@ -416,12 +419,14 @@ def train(epoch, loader):
             loss = loss_func(output, target)
         loss.backward()
         optimizer.step()
+        pred = output.argmax(dim=1, keepdim=True)
+        correct = pred.eq(target.view_as(pred)).sum().item()
         if True: #batch_idx % args.log_interval == 0:
-            #print(f"KL loss : {kl_divergence(model, z, mu, sigma).item()}")
             print('Train Epoch: {}/{} [{}/{} ({:.0f}%)]\tLoss: {:.6f}'.format(
-                epoch, args.epochs, batch_idx * len(data_original),
+                epoch, args.epochs, batch_idx * len(data),
                 len(dataloader['train'].dataset),
                 100. * batch_idx / len(dataloader['train']), loss.item()))
+            print(f'Correct :{100 * correct / args.batch_size}')
 
 
 def test(loader):
@@ -465,6 +470,8 @@ LAMBDA = 3e-5
 
 args.do_stn = False
 args.do_what = True
+
+args.batch_size = 50
 
 if __name__ == '__main__':
 

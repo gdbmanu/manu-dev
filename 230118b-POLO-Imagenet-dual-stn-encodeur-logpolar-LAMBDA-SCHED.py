@@ -209,7 +209,8 @@ width,base_levels, color, n_levels
 # In[17]:
 
 
-image_path = "../data/animal/"
+#image_path = "../data/animal/"
+image_path = "/envau/work/brainets/dauce.e/data/animal/"
 
 image_dataset = { 'train' : datasets.ImageFolder(
                             image_path+'train', 
@@ -466,9 +467,9 @@ def train(epoch, loader):
         correct = pred.eq(target.view_as(pred)).sum().item()
         if True: #batch_idx % args.log_interval == 0:
             print('Train Epoch: {}/{} [{}/{} ({:.0f}%)]\tLoss: {:.6f}'.format(
-                epoch, args.epochs, batch_idx * len(data),
+                epoch, args.epochs, batch_idx * args.batch_size,
                 len(dataloader['train'].dataset),
-                100. * batch_idx / len(dataloader['train']), loss.item()))
+                100. * batch_idx * args.batch_size / len(dataloader['train']), loss.item()))
             print(f'Correct :{100 * correct / args.batch_size}')
 
 
@@ -520,6 +521,7 @@ if __name__ == '__main__':
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
     #model = torch.load("../models/low_comp_polo_stn.pt")
     model = Polo_AttentionTransNet(LAMBDA=LAMBDA).to(device)
+    model = torch.load(f"low_comp_polo_stn_dual_lambda_{LAMBDA}_sched.pt")
 
     model.do_stn=False
     model.do_what=True
@@ -536,9 +538,9 @@ if __name__ == '__main__':
     # In[35]:
 
 
-    acc = []
-    loss = []
-    kl_loss = []
+    acc = list(np.load(f"low_comp_polo_stn_dual_lambda_{LAMBDA}_sched_acc.npy"))
+    loss = list(np.load(f"low_comp_polo_stn_dual_lambda_{LAMBDA}_sched_loss.npy"))
+    kl_loss = list(np.load(f"low_comp_polo_stn_dual_lambda_{LAMBDA}_sched_kl_loss.npy"))
 
     args.epochs = 1000
     args.radius = 0.1
@@ -576,10 +578,10 @@ if __name__ == '__main__':
         acc.append(curr_acc)
         loss.append(curr_loss)
         kl_loss.append(curr_kl_loss)
-        torch.save(model, f"low_comp_polo_stn_dual_lambda_{LAMBDA}_sched.pt")
-        np.save(f"low_comp_polo_stn_dual_lambda_{LAMBDA}_sched_acc", acc)
-        np.save(f"low_comp_polo_stn_dual_lambda_{LAMBDA}_sched_loss", loss)
-        np.save(f"low_comp_polo_stn_dual_lambda_{LAMBDA}_sched_kl_loss", kl_loss)
+        torch.save(model, f"low_comp_polo_stn_dual_lambda_{LAMBDA}_sched_2.pt")
+        np.save(f"low_comp_polo_stn_dual_lambda_{LAMBDA}_sched_acc_2", acc)
+        np.save(f"low_comp_polo_stn_dual_lambda_{LAMBDA}_sched_loss_2", loss)
+        np.save(f"low_comp_polo_stn_dual_lambda_{LAMBDA}_sched_kl_loss_2", kl_loss)
 
     model.cpu()
     torch.cuda.empty_cache()
