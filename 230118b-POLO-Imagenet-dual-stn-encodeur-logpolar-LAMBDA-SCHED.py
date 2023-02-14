@@ -209,8 +209,8 @@ width,base_levels, color, n_levels
 # In[17]:
 
 
-image_path = "/envau/work/brainets/dauce.e/data/animal/"
 #image_path = "../data/animal/"
+image_path = "/envau/work/brainets/dauce.e/data/animal/"
 
 image_dataset = { 'train' : datasets.ImageFolder(
                             image_path+'train', 
@@ -293,12 +293,11 @@ def kl_divergence(model, z, mu, std):
 
 class Polo_AttentionTransNet(nn.Module):
     
-    def __init__(self, do_stn=True, do_what=False, deterministic=False, LAMBDA=.1):
+    def __init__(self, do_stn=True, do_what=False, LAMBDA=.1):
         super(Polo_AttentionTransNet, self).__init__()
         
         self.do_stn = do_stn
         self.do_what = do_what
-        self.deterministic = deterministic
         
         self.LAMBDA = LAMBDA
 
@@ -362,16 +361,10 @@ class Polo_AttentionTransNet(nn.Module):
             #theta = F.sigmoid(self.loc4(xs)) - 0.5
             #theta = self.loc4(xs)
             mu = self.mu(xs)
-            if self.deterministic:
-                sigma = .1 * torch.ones_like(mu)  
-                self.q = torch.distributions.Normal(mu, sigma)  
-                z = mu
-            else:
-                logvar = self.logvar(xs) + 1
-                sigma = torch.exp(-logvar / 2)
-                self.q = torch.distributions.Normal(mu, sigma)      
-                z = self.q.rsample()
-            
+            logvar = self.logvar(xs) + 1
+            sigma = torch.exp(-logvar / 2)
+            self.q = torch.distributions.Normal(mu, sigma)
+            z = self.q.rsample()
             print(z[0,...])
             theta = torch.cat((self.downscale.unsqueeze(0).repeat(
                                 z.size(0), 1, 1), z.unsqueeze(2)),
@@ -476,7 +469,7 @@ def train(epoch, loader):
             print('Train Epoch: {}/{} [{}/{} ({:.0f}%)]\tLoss: {:.6f}'.format(
                 epoch, args.epochs, batch_idx * args.batch_size,
                 len(dataloader['train'].dataset),
-                100. * batch_idx / len(dataloader['train']), loss.item()))
+                100. * batch_idx * args.batch_size / len(dataloader['train']), loss.item()))
             print(f'Correct :{100 * correct / args.batch_size}')
 
 
@@ -519,8 +512,7 @@ def test(loader):
 
 
 lr = 1e-4
-LAMBDA = 1e-4
-deterministic = True
+LAMBDA = 3e-5
 
 # In[33]:
 if __name__ == '__main__':
@@ -528,8 +520,11 @@ if __name__ == '__main__':
 
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
     #model = torch.load("../models/low_comp_polo_stn.pt")
-    model = Polo_AttentionTransNet(LAMBDA=LAMBDA, deterministic=deterministic).to(device)
+    model = Polo_AttentionTransNet(LAMBDA=LAMBDA).to(device)
+    model = torch.load(f"low_comp_polo_stn_dual_lambda_{LAMBDA}_sched.pt")
 
+    model.do_stn=False
+    model.do_what=True
 
     # In[34]:
 
@@ -543,9 +538,9 @@ if __name__ == '__main__':
     # In[35]:
 
 
-    acc = []
-    loss = []
-    kl_loss = []
+    acc = list(np.load(f"low_comp_polo_stn_dual_lambda_{LAMBDA}_sched_acc.npy"))
+    loss = list(np.load(f"low_comp_polo_stn_dual_lambda_{LAMBDA}_sched_loss.npy"))
+    kl_loss = list(np.load(f"low_comp_polo_stn_dual_lambda_{LAMBDA}_sched_kl_loss.npy"))
 
     args.epochs = 1000
     args.radius = 0.1
@@ -560,9 +555,7 @@ if __name__ == '__main__':
     for epoch in range(args.epochs):
 
         args.std_sched = args.radius
-        
-        model.do_stn=True
-        model.do_what=False
+            
         params = []
         if epoch % 2 == 1:
             params.extend(list(model.loc1.parameters()))
@@ -585,10 +578,10 @@ if __name__ == '__main__':
         acc.append(curr_acc)
         loss.append(curr_loss)
         kl_loss.append(curr_kl_loss)
-        torch.save(model, f"low_comp_polo_stn_dual_lambda_{LAMBDA}_{deterministic}.pt")
-        np.save(f"low_comp_polo_stn_dual_lambda_{LAMBDA}_{deterministic}_acc", acc)
-        np.save(f"low_comp_polo_stn_dual_lambda_{LAMBDA}_{deterministic}_loss", loss)
-        np.save(f"low_comp_polo_stn_dual_lambda_{LAMBDA}_{deterministic}_kl_loss", kl_loss)
+        torch.save(model, f"low_comp_polo_stn_dual_lambda_{LAMBDA}_sched_2.pt")
+        np.save(f"low_comp_polo_stn_dual_lambda_{LAMBDA}_sched_acc_2", acc)
+        np.save(f"low_comp_polo_stn_dual_lambda_{LAMBDA}_sched_loss_2", loss)
+        np.save(f"low_comp_polo_stn_dual_lambda_{LAMBDA}_sched_kl_loss_2", kl_loss)
 
     model.cpu()
     torch.cuda.empty_cache()

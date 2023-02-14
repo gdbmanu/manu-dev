@@ -367,7 +367,7 @@ class Polo_AttentionTransNet(nn.Module):
                 self.q = torch.distributions.Normal(mu, sigma)  
                 z = mu
             else:
-                logvar = self.logvar(xs) + 1
+                logvar = self.logvar(xs) + 6
                 sigma = torch.exp(-logvar / 2)
                 self.q = torch.distributions.Normal(mu, sigma)      
                 z = self.q.rsample()
@@ -473,10 +473,12 @@ def train(epoch, loader):
         pred = output.argmax(dim=1, keepdim=True)
         correct = pred.eq(target.view_as(pred)).sum().item()
         if True: #batch_idx % args.log_interval == 0:
-            print('Train Epoch: {}/{} [{}/{} ({:.0f}%)]\tLoss: {:.6f}'.format(
+            print('Train Epoch: {}/{} [{}/{} ({:.0f}%)]\tLoss: {:.6f}\tKL Loss: {:.6f}'.format(
                 epoch, args.epochs, batch_idx * args.batch_size,
                 len(dataloader['train'].dataset),
-                100. * batch_idx / len(dataloader['train']), loss.item()))
+                100. * batch_idx / len(dataloader['train']), 
+                loss_func(output, target).item(), 
+                kl_divergence(model, z, mu, sigma).item()))
             print(f'Correct :{100 * correct / args.batch_size}')
 
 
@@ -519,7 +521,7 @@ def test(loader):
 
 
 lr = 1e-4
-LAMBDA = 1e-4
+LAMBDA = 1e-2
 deterministic = True
 
 # In[33]:
@@ -565,6 +567,7 @@ if __name__ == '__main__':
         model.do_what=False
         params = []
         if epoch % 2 == 1:
+            model.deterministic=True
             params.extend(list(model.loc1.parameters()))
             params.extend(list(model.loc2a.parameters()))
             params.extend(list(model.loc2b.parameters()))
@@ -572,6 +575,7 @@ if __name__ == '__main__':
             params.extend(list(model.mu.parameters()))
             params.extend(list(model.logvar.parameters()))
         else:
+            model.deterministic=False
             params.extend(list(model.wloc1.parameters()))
             params.extend(list(model.wloc2a.parameters()))
             params.extend(list(model.wloc2b.parameters()))
@@ -585,10 +589,10 @@ if __name__ == '__main__':
         acc.append(curr_acc)
         loss.append(curr_loss)
         kl_loss.append(curr_kl_loss)
-        torch.save(model, f"low_comp_polo_stn_dual_lambda_{LAMBDA}_{deterministic}.pt")
-        np.save(f"low_comp_polo_stn_dual_lambda_{LAMBDA}_{deterministic}_acc", acc)
-        np.save(f"low_comp_polo_stn_dual_lambda_{LAMBDA}_{deterministic}_loss", loss)
-        np.save(f"low_comp_polo_stn_dual_lambda_{LAMBDA}_{deterministic}_kl_loss", kl_loss)
+        torch.save(model, f"230213_polo_stn_dual_lambda_{LAMBDA}_mixed.pt")
+        np.save(f"230213_polo_stn_dual_lambda_{LAMBDA}_mixed_acc", acc)
+        np.save(f"230213_polo_stn_dual_lambda_{LAMBDA}_mixed_loss", loss)
+        np.save(f"230213_polo_stn_dual_lambda_{LAMBDA}_mixed_kl_loss", kl_loss)
 
     model.cpu()
     torch.cuda.empty_cache()
