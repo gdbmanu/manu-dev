@@ -324,8 +324,8 @@ class Polo_AttentionTransNet(nn.Module):
                                50, 5, padding=2,stride=2)
         self.loc3 = nn.Linear((n_levels['in']-1) * n_eccentricity['in'] // 2 * n_azimuth['in'] // 2 * (50+100), 
                               500)
-        self.mu = nn.Linear(500, 2) #, bias=False)
-        self.logvar = nn.Linear(500, 2) #, bias=False)
+        self.mu = nn.Linear(500, 2, bias=False)
+        self.logvar = nn.Linear(500, 2, bias=False)
         
         
 
@@ -462,6 +462,24 @@ def train(epoch, loader):
                 device, dtype=torch.double), data_polo['out'].to(
                 device, dtype=torch.double), target.to(device)
 
+        params = []
+        if batch_idx % 2 == 1:
+            model.deterministic=True
+            params.extend(list(model.loc1.parameters()))
+            params.extend(list(model.loc2a.parameters()))
+            params.extend(list(model.loc2b.parameters()))
+            params.extend(list(model.loc3.parameters()))
+            #params.extend(list(model.mu.parameters()))
+            #params.extend(list(model.logvar.parameters()))
+        else:
+            model.deterministic=False
+            params.extend(list(model.wloc1.parameters()))
+            params.extend(list(model.wloc2a.parameters()))
+            params.extend(list(model.wloc2b.parameters()))
+            params.extend(list(model.wloc3.parameters()))
+            #params.extend(list(model.wloc4.parameters()))
+
+        optimizer = optim.Adam(params, lr=lr)
         optimizer.zero_grad()
         output, theta, z, mu, sigma = model(data_original, data_polo)
         if model.do_stn :
@@ -489,6 +507,7 @@ def test(loader):
         test_loss = 0
         kl_loss = 0
         correct = 0
+        model.deterministic = True
         for data, target in loader:
             data_original, data_polo = data[0], data[1]
             data_original = data_original.to(device, dtype=torch.double)            
@@ -565,34 +584,16 @@ if __name__ == '__main__':
         
         model.do_stn=True
         model.do_what=False
-        params = []
-        if epoch % 2 == 1:
-            model.deterministic=True
-            params.extend(list(model.loc1.parameters()))
-            params.extend(list(model.loc2a.parameters()))
-            params.extend(list(model.loc2b.parameters()))
-            params.extend(list(model.loc3.parameters()))
-            params.extend(list(model.mu.parameters()))
-            #params.extend(list(model.logvar.parameters()))
-        else:
-            model.deterministic=False
-            params.extend(list(model.wloc1.parameters()))
-            params.extend(list(model.wloc2a.parameters()))
-            params.extend(list(model.wloc2b.parameters()))
-            params.extend(list(model.wloc3.parameters()))
-            params.extend(list(model.wloc4.parameters()))
-
-        optimizer = optim.Adam(params, lr=lr)
 
         train(epoch, dataloader['train'])
         curr_acc, curr_loss, curr_kl_loss = test(dataloader['test'])
         acc.append(curr_acc)
         loss.append(curr_loss)
         kl_loss.append(curr_kl_loss)
-        torch.save(model, f"230213_polo_stn_dual_lambda_{LAMBDA}_mixed.pt")
-        np.save(f"230213_polo_stn_dual_lambda_{LAMBDA}_mixed_acc", acc)
-        np.save(f"230213_polo_stn_dual_lambda_{LAMBDA}_mixed_loss", loss)
-        np.save(f"230213_polo_stn_dual_lambda_{LAMBDA}_mixed_kl_loss", kl_loss)
+        torch.save(model, f"230214_polo_stn_dual_lambda_{LAMBDA}_mixed.pt")
+        np.save(f"230214_polo_stn_dual_lambda_{LAMBDA}_mixed_acc", acc)
+        np.save(f"230214_polo_stn_dual_lambda_{LAMBDA}_mixed_loss", loss)
+        np.save(f"230214_polo_stn_dual_lambda_{LAMBDA}_mixed_kl_loss", kl_loss)
 
     model.cpu()
     torch.cuda.empty_cache()
