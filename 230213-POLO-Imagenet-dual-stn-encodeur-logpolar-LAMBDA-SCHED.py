@@ -209,7 +209,8 @@ width,base_levels, color, n_levels
 # In[17]:
 
 
-image_path = "/envau/work/brainets/dauce.e/data/animal/"
+#image_path = "/envau/work/brainets/dauce.e/data/animal/"
+image_path = "/run/user/1001/gvfs/sftp:host=bag-008-de03/envau/work/brainets/dauce.e/data/animal/"
 #image_path = "../data/animal/"
 
 image_dataset = { 'train' : datasets.ImageFolder(
