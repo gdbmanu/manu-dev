@@ -198,18 +198,12 @@ transform_big =  transforms.Compose([
         ])
 
 
-# In[16]:
-
-
-width,base_levels, color, n_levels
-
-
 # In[17]:
 
 
 #image_path = "/envau/work/brainets/dauce.e/data/animal/"
-#image_path = "/media/manu/Seagate Expansion Drive/Data/animal/"
-image_path = "/run/user/1001/gvfs/sftp:host=bag-008-de03/envau/work/brainets/dauce.e/data/animal/"
+image_path = "/media/manu/Seagate Expansion Drive/Data/animal/"
+#image_path = "/run/user/1001/gvfs/sftp:host=bag-008-de03/envau/work/brainets/dauce.e/data/animal/"
 
 #image_path = "../data/animal/"
 
@@ -599,10 +593,10 @@ if __name__ == '__main__':
         acc.append(curr_acc)
         loss.append(curr_loss)
         kl_loss.append(curr_kl_loss)
-        torch.save(model, f"230216_polo_stn_dual_lambda_{LAMBDA}_mixed.pt")
-        np.save(f"230216_polo_stn_dual_lambda_{LAMBDA}_mixed_acc", acc)
-        np.save(f"230216_polo_stn_dual_lambda_{LAMBDA}_mixed_loss", loss)
-        np.save(f"230216_polo_stn_dual_lambda_{LAMBDA}_mixed_kl_loss", kl_loss)
+        torch.save(model, f"230217_polo_stn_dual_lambda_{LAMBDA}_mixed.pt")
+        np.save(f"230217_polo_stn_dual_lambda_{LAMBDA}_mixed_acc", acc)
+        np.save(f"230217_polo_stn_dual_lambda_{LAMBDA}_mixed_loss", loss)
+        np.save(f"230217_polo_stn_dual_lambda_{LAMBDA}_mixed_kl_loss", kl_loss)
 
     model.cpu()
     torch.cuda.empty_cache()
