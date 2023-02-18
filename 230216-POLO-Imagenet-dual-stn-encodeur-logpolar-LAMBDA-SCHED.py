@@ -209,9 +209,9 @@ width,base_levels, color, n_levels
 # In[17]:
 
 
-#image_path = "/envau/work/brainets/dauce.e/data/animal/"
+image_path = "/envau/work/brainets/dauce.e/data/animal/"
 #image_path = "/media/manu/Seagate Expansion Drive/Data/animal/"
-image_path = "/run/user/1001/gvfs/sftp:host=bag-008-de03/envau/work/brainets/dauce.e/data/animal/"
+#image_path = "/run/user/1001/gvfs/sftp:host=bag-008-de03/envau/work/brainets/dauce.e/data/animal/"
 
 #image_path = "../data/animal/"
 
@@ -272,11 +272,11 @@ transform_in =  transforms.Compose([
 # In[29]:
 
 
-def negentropy_loss(z):
+def negentropy_loss(model, z):
     z_mean = torch.mean(z, dim=0)
     z_std = torch.std(z, dim=0)
     p = torch.distributions.Normal(torch.ones_like(z)*z_mean, torch.ones_like(z) * z_std)
-    return p.log_prob(z).sum()
+    return .3 * model.LAMBDA * p.log_prob(z).sum()
 
 def kl_divergence(model, z, mu, std):
     # --------------------------
@@ -471,7 +471,7 @@ def train(epoch, loader):
                 device, dtype=torch.double), target.to(device)
 
         params = []
-        if batch_idx % 2 == 1:
+        if batch_idx % 10 == 9:
             model.deterministic=True
             params.extend(list(model.loc1.parameters()))
             params.extend(list(model.loc2a.parameters()))
@@ -491,7 +491,7 @@ def train(epoch, loader):
         optimizer.zero_grad()
         output, theta, z, mu, sigma = model(data_original, data_polo)
         if model.do_stn :
-            loss = loss_func(output, target) + kl_divergence(model, z, mu, sigma) + negentropy_loss(z)
+            loss = loss_func(output, target) + kl_divergence(model, z, mu, sigma) + negentropy_loss(model, z)
         else:
             loss = loss_func(output, target)
         loss.backward()
@@ -505,7 +505,7 @@ def train(epoch, loader):
                 100. * batch_idx / len(dataloader['train']), 
                 loss_func(output, target).item(), 
                 kl_divergence(model, z, mu, sigma).item(),
-                -negentropy_loss(z).item()))
+                -negentropy_loss(model, z).item()))
             print(f'Correct :{100 * correct / args.batch_size}')
 
 
@@ -549,7 +549,7 @@ def test(loader):
 
 
 lr = 1e-4
-LAMBDA = 1e-4
+LAMBDA = 1e-3
 deterministic = True
 
 # In[33]:
@@ -599,10 +599,10 @@ if __name__ == '__main__':
         acc.append(curr_acc)
         loss.append(curr_loss)
         kl_loss.append(curr_kl_loss)
-        torch.save(model, f"230216_polo_stn_dual_lambda_{LAMBDA}_mixed.pt")
-        np.save(f"230216_polo_stn_dual_lambda_{LAMBDA}_mixed_acc", acc)
-        np.save(f"230216_polo_stn_dual_lambda_{LAMBDA}_mixed_loss", loss)
-        np.save(f"230216_polo_stn_dual_lambda_{LAMBDA}_mixed_kl_loss", kl_loss)
+        torch.save(model, f"230216b_polo_stn_dual_lambda_{LAMBDA}_mixed.pt")
+        np.save(f"230216b_polo_stn_dual_lambda_{LAMBDA}_mixed_acc", acc)
+        np.save(f"230216b_polo_stn_dual_lambda_{LAMBDA}_mixed_loss", loss)
+        np.save(f"230216b_polo_stn_dual_lambda_{LAMBDA}_mixed_kl_loss", kl_loss)
 
     model.cpu()
     torch.cuda.empty_cache()
