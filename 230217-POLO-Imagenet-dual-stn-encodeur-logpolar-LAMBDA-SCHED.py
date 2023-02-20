@@ -198,12 +198,6 @@ transform_big =  transforms.Compose([
         ])
 
 
-# In[16]:
-
-
-width,base_levels, color, n_levels
-
-
 # In[17]:
 
 
@@ -281,7 +275,7 @@ def kl_divergence(model, z, mu, std):
     # Monte carlo KL divergence
     # --------------------------
     # 1. define the first two probabilities (in this case Normal for both)
-    p = torch.distributions.Normal(torch.zeros_like(mu), args.std_sched * torch.ones_like(std))
+    p = torch.distributions.Normal(torch.zeros_like(mu), args.radius * torch.ones_like(std))
 
     # 2. get the probabilities from the equation
     log_qzx = model.q.log_prob(z)
@@ -369,7 +363,7 @@ class Polo_AttentionTransNet(nn.Module):
             #theta = self.loc4(xs)
             mu = self.mu(xs)
             if self.deterministic:
-                sigma = .1 * torch.ones_like(mu)  
+                sigma = args.radius * torch.ones_like(mu)  
                 self.q = torch.distributions.Normal(mu, sigma)  
                 z = mu
             else:
@@ -468,34 +462,10 @@ def train(epoch, loader):
                 device, dtype=torch.double), data_polo['out'].to(
                 device, dtype=torch.double), target.to(device)
 
-<<<<<<< HEAD
-        params = []
-        if batch_idx % 10 == 9:
-            model.deterministic=True
-            params.extend(list(model.loc1.parameters()))
-            params.extend(list(model.loc2a.parameters()))
-            params.extend(list(model.loc2b.parameters()))
-            params.extend(list(model.loc3.parameters()))
-            params.extend(list(model.mu.parameters()))
-            #params.extend(list(model.logvar.parameters()))
-        else:
-            model.deterministic=False
-            params.extend(list(model.wloc1.parameters()))
-            params.extend(list(model.wloc2a.parameters()))
-            params.extend(list(model.wloc2b.parameters()))
-            params.extend(list(model.wloc3.parameters()))
-            params.extend(list(model.wloc4.parameters()))
-
-        optimizer = optim.Adam(params, lr=lr)
-        optimizer.zero_grad()
-        output, theta, z, mu, sigma = model(data_original, data_polo)
-        if model.do_stn :
-=======
         
         optimizer.zero_grad()
         output, theta, z, mu, sigma = model(data_original, data_polo)
         if model.do_stn and model.deterministic:
->>>>>>> cc30afd40e77dd235897fe3b19ca55a1783deeff
             loss = loss_func(output, target) + kl_divergence(model, z, mu, sigma) + negentropy_loss(model, z)
         else:
             loss = loss_func(output, target)
@@ -520,6 +490,7 @@ def test(loader):
         model.eval()
         test_loss = 0
         kl_loss = 0
+        entropy = 0
         correct = 0
         model.deterministic = True
         for data, target in loader:
@@ -535,6 +506,7 @@ def test(loader):
             #test_loss += F.nll_loss(output, target, size_average=False).item()
             test_loss += loss_func(output, target).item()
             kl_loss += kl_divergence(model, z, mu, sigma).item()
+            entropy -= negentropy_loss(model, z).item()
             # get the index of the max log-probability
             #pred = output.max(1, keepdim=True)[1]
             pred = output.argmax(dim=1, keepdim=True)
@@ -542,11 +514,13 @@ def test(loader):
 
         test_loss /= len(dataloader['test'].dataset)
         kl_loss /= len(dataloader['test'].dataset)
-        print('\nTest set: CE loss: {:.4f}, Accuracy: {}/{} ({:.0f}%), KL loss: {:.4f}\n'.
+        entropy /= len(dataloader['test'].dataset)
+        print('\nTest set: CE loss: {:.4f}, Accuracy: {}/{} ({:.0f}%), KL loss: {:.4f}, Entropy:{:.4f}\n'.
               format(test_loss, correct, len(dataloader['test'].dataset),
                      100. * correct / len(dataloader['test'].dataset),
-                     kl_loss))
-        return correct / len(dataloader['test'].dataset), test_loss, kl_loss
+                     kl_loss,
+                     entropy))
+        return correct / len(dataloader['test'].dataset), test_loss, kl_loss, entropy
 
 # # Training 
 
@@ -554,7 +528,7 @@ def test(loader):
 
 
 lr = 1e-4
-LAMBDA = 1e-3
+LAMBDA = 1e-2
 deterministic = True
 
 # In[33]:
@@ -581,9 +555,10 @@ if __name__ == '__main__':
     acc = []
     loss = []
     kl_loss = []
+    entropy = []
 
     args.epochs = 1000
-    args.radius = 0.1
+    args.radius = 0.3
 
     model.do_stn = True
     log_std_min = -6
@@ -594,8 +569,6 @@ if __name__ == '__main__':
 
     for epoch in range(args.epochs):
 
-        args.std_sched = args.radius
-        
         model.do_stn=True
         model.do_what=False
 
@@ -619,14 +592,16 @@ if __name__ == '__main__':
         optimizer = optim.Adam(params, lr=lr)
 
         train(epoch, dataloader['train'])
-        curr_acc, curr_loss, curr_kl_loss = test(dataloader['test'])
+        curr_acc, curr_loss, curr_kl_loss, curr_entropy = test(dataloader['test'])
         acc.append(curr_acc)
         loss.append(curr_loss)
         kl_loss.append(curr_kl_loss)
-        torch.save(model, f"230216b_polo_stn_dual_lambda_{LAMBDA}_mixed.pt")
-        np.save(f"230216b_polo_stn_dual_lambda_{LAMBDA}_mixed_acc", acc)
-        np.save(f"230216b_polo_stn_dual_lambda_{LAMBDA}_mixed_loss", loss)
-        np.save(f"230216b_polo_stn_dual_lambda_{LAMBDA}_mixed_kl_loss", kl_loss)
+        entropy.append(curr_entropy)
+        torch.save(model, f"230217_polo_stn_dual_lambda_{LAMBDA}_{args.radius}_mixed.pt")
+        np.save(f"230217_polo_stn_dual_lambda_{LAMBDA}_{args.radius}_mixed_acc", acc)
+        np.save(f"230217_polo_stn_dual_lambda_{LAMBDA}_{args.radius}_mixed_loss", loss)
+        np.save(f"230217_polo_stn_dual_lambda_{LAMBDA}_{args.radius}_mixed_kl_loss", kl_loss)
+        np.save(f"230217_polo_stn_dual_lambda_{LAMBDA}_{args.radius}_mixed_entropy", entropy)
 
     model.cpu()
     torch.cuda.empty_cache()

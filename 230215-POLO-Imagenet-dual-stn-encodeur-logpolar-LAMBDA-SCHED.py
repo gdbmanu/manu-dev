@@ -367,7 +367,7 @@ class Polo_AttentionTransNet(nn.Module):
                 self.q = torch.distributions.Normal(mu, sigma)  
                 z = mu
             else:
-                logvar = self.logvar(xs) + 3
+                logvar = self.logvar(xs) + 6
                 sigma = torch.exp(-logvar / 2)
                 self.q = torch.distributions.Normal(mu, sigma)      
                 z = self.q.rsample()
@@ -540,7 +540,7 @@ def test(loader):
 
 
 lr = 1e-4
-LAMBDA = 1e-4
+LAMBDA = 1e-3
 deterministic = True
 
 # In[33]:
