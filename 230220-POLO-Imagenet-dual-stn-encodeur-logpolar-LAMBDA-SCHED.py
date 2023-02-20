@@ -201,8 +201,8 @@ transform_big =  transforms.Compose([
 # In[17]:
 
 
-image_path = "/envau/work/brainets/dauce.e/data/animal/"
-#image_path = "/media/manu/Seagate Expansion Drive/Data/animal/"
+#image_path = "/envau/work/brainets/dauce.e/data/animal/"
+image_path = "/media/manu/Seagate Expansion Drive/Data/animal/"
 #image_path = "/run/user/1001/gvfs/sftp:host=bag-008-de03/envau/work/brainets/dauce.e/data/animal/"
 #image_path = "../data/animal/"
 
@@ -267,7 +267,7 @@ def negentropy_loss(model, z):
     z_mean = torch.mean(z, dim=0)
     z_std = torch.std(z, dim=0)
     p = torch.distributions.Normal(torch.ones_like(z)*z_mean, torch.ones_like(z) * z_std)
-    return .3 * model.LAMBDA * p.log_prob(z).sum()
+    return model.LAMBDA * p.log_prob(z).sum()
 
 def kl_divergence(model, z, mu, std):
     # --------------------------
@@ -277,8 +277,13 @@ def kl_divergence(model, z, mu, std):
     p = torch.distributions.Normal(torch.zeros_like(mu), args.radius * torch.ones_like(std))
 
     # 2. get the probabilities from the equation
-    log_qzx = model.q.log_prob(z)
+    #log_qzx = model.q.log_prob(z)
     log_pz = p.log_prob(z)
+
+    z_mean = torch.mean(z, dim=0)
+    z_std = torch.std(z, dim=0)
+    q = torch.distributions.Normal(torch.ones_like(z)*z_mean, torch.ones_like(z) * z_std)
+    log_qzx = q.log_prob(z)
 
     # kl
     kl = (log_qzx - log_pz)
@@ -366,7 +371,7 @@ class Polo_AttentionTransNet(nn.Module):
                 self.q = torch.distributions.Normal(mu, sigma)  
                 z = mu
             else:
-                logvar = self.logvar(xs) + 6
+                logvar = self.logvar(xs) + 5
                 sigma = torch.exp(-logvar / 2)
                 self.q = torch.distributions.Normal(mu, sigma)      
                 z = self.q.rsample()
@@ -465,7 +470,7 @@ def train(epoch, loader):
         optimizer.zero_grad()
         output, theta, z, mu, sigma = model(data_original, data_polo)
         if model.do_stn and model.deterministic:
-            loss = loss_func(output, target) + kl_divergence(model, z, mu, sigma) + negentropy_loss(model, z)
+            loss = loss_func(output, target) + kl_divergence(model, z, mu, sigma) #+ negentropy_loss(model, z)
         else:
             loss = loss_func(output, target)
         loss.backward()
@@ -492,7 +497,7 @@ def test(loader):
         entropy = 0
         correct = 0
         model.deterministic = True
-        for data, target in loader:
+        for num_batch, (data, target) in enumerate(loader):
             data_original, data_polo = data[0], data[1]
             data_original = data_original.to(device, dtype=torch.double)            
             data_polo['in'] = data_polo['in'].to(device, dtype=torch.double) 
@@ -511,14 +516,13 @@ def test(loader):
             pred = output.argmax(dim=1, keepdim=True)
             correct += pred.eq(target.view_as(pred)).sum().item()
 
-        test_loss /= len(dataloader['test'].dataset)
-        kl_loss /= len(dataloader['test'].dataset)
-        entropy /= len(dataloader['test'].dataset)
-        print('\nTest set: CE loss: {:.4f}, Accuracy: {}/{} ({:.0f}%), KL loss: {:.4f}, Entropy:{:.4f}\n'.
+        test_loss /= num_batch
+        kl_loss /= num_batch
+        entropy /= num_batch
+        print('\nTest set: CE loss: {:.4f}, Accuracy: {}/{} ({:.0f}%), KL loss: {:.4f}, Entropy: {:.4f}\n'.
               format(test_loss, correct, len(dataloader['test'].dataset),
                      100. * correct / len(dataloader['test'].dataset),
-                     kl_loss,
-                     entropy))
+                     kl_loss, entropy))
         return correct / len(dataloader['test'].dataset), test_loss, kl_loss, entropy
 
 # # Training 
@@ -527,7 +531,7 @@ def test(loader):
 
 
 lr = 1e-4
-LAMBDA = 1e-2
+LAMBDA = 1e-4
 deterministic = True
 
 # In[33]:
@@ -557,7 +561,7 @@ if __name__ == '__main__':
     entropy = []
 
     args.epochs = 1000
-    args.radius = 0.3
+    args.radius = 0.1
 
     model.do_stn = True
     log_std_min = -6
@@ -567,7 +571,7 @@ if __name__ == '__main__':
     #std_axe = np.linspace(1e-6, 1, args.epochs)
 
     for epoch in range(args.epochs):
-
+        
         model.do_stn=True
         model.do_what=False
 
@@ -596,11 +600,11 @@ if __name__ == '__main__':
         loss.append(curr_loss)
         kl_loss.append(curr_kl_loss)
         entropy.append(curr_entropy)
-        torch.save(model, f"230217_polo_stn_dual_lambda_{LAMBDA}_{args.radius}_mixed.pt")
-        np.save(f"230217_polo_stn_dual_lambda_{LAMBDA}_{args.radius}_mixed_acc", acc)
-        np.save(f"230217_polo_stn_dual_lambda_{LAMBDA}_{args.radius}_mixed_loss", loss)
-        np.save(f"230217_polo_stn_dual_lambda_{LAMBDA}_{args.radius}_mixed_kl_loss", kl_loss)
-        np.save(f"230217_polo_stn_dual_lambda_{LAMBDA}_{args.radius}_mixed_entropy", entropy)
+        torch.save(model, f"230220_polo_stn_dual_lambda_{LAMBDA}_{args.radius}.pt")
+        np.save(f"230220_polo_stn_dual_lambda_{LAMBDA}_{args.radius}_acc", acc)
+        np.save(f"230220_polo_stn_dual_lambda_{LAMBDA}_{args.radius}_loss", loss)
+        np.save(f"230220_polo_stn_dual_lambda_{LAMBDA}_{args.radius}_kl_loss", kl_loss)
+        np.save(f"230220_polo_stn_dual_lambda_{LAMBDA}_{args.radius}_entropy", entropy)
 
     model.cpu()
     torch.cuda.empty_cache()
