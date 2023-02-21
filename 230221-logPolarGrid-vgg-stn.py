@@ -16,7 +16,7 @@ from utils import view_data
 from typing import List, Tuple
 
 from easydict import EasyDict as edict
-
+import pickle
 
 # In[21]:
 
@@ -208,7 +208,7 @@ class Grid_AttentionTransNet(nn.Module):
                     self.q = torch.distributions.Normal(mu, sigma)  
                     z = mu
                 else:
-                    logvar = self.logvar(y) + 5
+                    logvar = self.logvar(y) + 4
                     sigma = torch.exp(-logvar / 2)
                     self.q = torch.distributions.Normal(mu, sigma)      
                     z = self.q.rsample()
@@ -342,7 +342,7 @@ def test(loader):
 
 
 lr = 1e-4
-LAMBDA = 1e-4
+LAMBDA = 1e-2
 
 args.epochs = 150
 radius = 0.1
@@ -411,7 +411,7 @@ for epoch in range(args.epochs):
     test_kl_loss.append(kl_loss)
     test_entropy.append(entropy)
     torch.save(model, f"230221_logPolarGrid_vgg_stn_{LAMBDA}_{args.radius}.pt")
-    with open("230221_logPolarGrid_vgg_stn_{LAMBDA}_{args.radius}.pkl", "wb") as f:
+    with open(f"230221_logPolarGrid_vgg_stn_{LAMBDA}_{args.radius}.pkl", "wb") as f:
         train_data = {
                 "train_acc" : train_acc,
                 "train_loss" : train_loss,
