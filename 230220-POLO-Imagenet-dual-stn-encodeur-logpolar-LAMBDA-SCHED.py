@@ -201,8 +201,8 @@ transform_big =  transforms.Compose([
 # In[17]:
 
 
-#image_path = "/envau/work/brainets/dauce.e/data/animal/"
-image_path = "/media/manu/Seagate Expansion Drive/Data/animal/"
+image_path = "/envau/work/brainets/dauce.e/data/animal/"
+#image_path = "/media/manu/Seagate Expansion Drive/Data/animal/"
 #image_path = "/run/user/1001/gvfs/sftp:host=bag-008-de03/envau/work/brainets/dauce.e/data/animal/"
 #image_path = "../data/animal/"
 
@@ -561,7 +561,7 @@ if __name__ == '__main__':
     entropy = []
 
     args.epochs = 1000
-    args.radius = 0.1
+    args.radius = 0.2
 
     model.do_stn = True
     log_std_min = -6
