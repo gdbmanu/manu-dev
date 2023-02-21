@@ -207,9 +207,9 @@ width,base_levels, color, n_levels
 # In[17]:
 
 
-#image_path = "/envau/work/brainets/dauce.e/data/animal/"
+image_path = "/envau/work/brainets/dauce.e/data/animal/"
 #image_path = "/media/manu/Seagate Expansion Drive/Data/animal/"
-image_path = "/run/user/1001/gvfs/sftp:host=bag-008-de03/envau/work/brainets/dauce.e/data/animal/"
+#image_path = "/run/user/1001/gvfs/sftp:host=bag-008-de03/envau/work/brainets/dauce.e/data/animal/"
 
 #image_path = "../data/animal/"
 
@@ -468,10 +468,34 @@ def train(epoch, loader):
                 device, dtype=torch.double), data_polo['out'].to(
                 device, dtype=torch.double), target.to(device)
 
+<<<<<<< HEAD
+        params = []
+        if batch_idx % 10 == 9:
+            model.deterministic=True
+            params.extend(list(model.loc1.parameters()))
+            params.extend(list(model.loc2a.parameters()))
+            params.extend(list(model.loc2b.parameters()))
+            params.extend(list(model.loc3.parameters()))
+            params.extend(list(model.mu.parameters()))
+            #params.extend(list(model.logvar.parameters()))
+        else:
+            model.deterministic=False
+            params.extend(list(model.wloc1.parameters()))
+            params.extend(list(model.wloc2a.parameters()))
+            params.extend(list(model.wloc2b.parameters()))
+            params.extend(list(model.wloc3.parameters()))
+            params.extend(list(model.wloc4.parameters()))
+
+        optimizer = optim.Adam(params, lr=lr)
+        optimizer.zero_grad()
+        output, theta, z, mu, sigma = model(data_original, data_polo)
+        if model.do_stn :
+=======
         
         optimizer.zero_grad()
         output, theta, z, mu, sigma = model(data_original, data_polo)
         if model.do_stn and model.deterministic:
+>>>>>>> cc30afd40e77dd235897fe3b19ca55a1783deeff
             loss = loss_func(output, target) + kl_divergence(model, z, mu, sigma) + negentropy_loss(model, z)
         else:
             loss = loss_func(output, target)
@@ -530,7 +554,7 @@ def test(loader):
 
 
 lr = 1e-4
-LAMBDA = 1e-4
+LAMBDA = 1e-3
 deterministic = True
 
 # In[33]:
@@ -599,10 +623,10 @@ if __name__ == '__main__':
         acc.append(curr_acc)
         loss.append(curr_loss)
         kl_loss.append(curr_kl_loss)
-        torch.save(model, f"230216_polo_stn_dual_lambda_{LAMBDA}_mixed.pt")
-        np.save(f"230216_polo_stn_dual_lambda_{LAMBDA}_mixed_acc", acc)
-        np.save(f"230216_polo_stn_dual_lambda_{LAMBDA}_mixed_loss", loss)
-        np.save(f"230216_polo_stn_dual_lambda_{LAMBDA}_mixed_kl_loss", kl_loss)
+        torch.save(model, f"230216b_polo_stn_dual_lambda_{LAMBDA}_mixed.pt")
+        np.save(f"230216b_polo_stn_dual_lambda_{LAMBDA}_mixed_acc", acc)
+        np.save(f"230216b_polo_stn_dual_lambda_{LAMBDA}_mixed_loss", loss)
+        np.save(f"230216b_polo_stn_dual_lambda_{LAMBDA}_mixed_kl_loss", kl_loss)
 
     model.cpu()
     torch.cuda.empty_cache()

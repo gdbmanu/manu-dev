@@ -16,7 +16,7 @@ from utils import view_data
 from typing import List, Tuple
 
 from easydict import EasyDict as edict
-
+import pickle
 
 # In[21]:
 
@@ -53,7 +53,7 @@ transform_base =  transforms.Compose([
 #image_path = "/envau/work/brainets/dauce.e/data/animal/"
 #image_path = "/media/manu/Seagate Expansion Drive/Data/animal/"
 #image_path = "/run/user/1001/gvfs/sftp:host=bag-008-de03/envau/work/brainets/dauce.e/data/animal/"
-image_path = "../data/animal.0/"
+image_path = "../data/animal/"
 
 image_dataset = { 'train' : datasets.ImageFolder(
                             image_path+'train',
@@ -198,6 +198,7 @@ class Grid_AttentionTransNet(nn.Module):
         logPolx = x #F.grid_sample(x, self.where_grid)
         
         if self.do_stn:
+<<<<<<< HEAD
             with torch.no_grad():
                 y = self.vgg_where(logPolx)
             mu = self.mu(y)
@@ -211,6 +212,22 @@ class Grid_AttentionTransNet(nn.Module):
                 sigma = torch.exp(-logvar / 2)
                 self.q = torch.distributions.Normal(mu, sigma)      
                 z = self.q.rsample()
+=======
+            if True: #
+                with torch.no_grad():
+                    y = self.vgg_where(logPolx)
+                mu = self.mu(y)
+                                   
+                if self.deterministic:
+                    sigma = args.radius * torch.ones_like(mu)
+                    self.q = torch.distributions.Normal(mu, sigma)  
+                    z = mu
+                else:
+                    logvar = self.logvar(y) + 4
+                    sigma = torch.exp(-logvar / 2)
+                    self.q = torch.distributions.Normal(mu, sigma)      
+                    z = self.q.rsample()
+>>>>>>> 3d552ca7428cd6487ef267ccf0a6a3fa87d4b8d1
             print(z[0,...])
             theta = torch.cat((self.downscale.unsqueeze(0).repeat(
                                 z.size(0), 1, 1), z.unsqueeze(2)),
@@ -265,6 +282,10 @@ class Grid_AttentionTransNet(nn.Module):
 
 def train(epoch, loader):
     model.train()
+    train_loss = 0
+    kl_loss = 0
+    entropy = 0
+    correct = 0
     for batch_idx, (data, target) in enumerate(loader):
 
         data, target = data.to(device, dtype=torch.float), target.to(device)
@@ -278,7 +299,6 @@ def train(epoch, loader):
         loss.backward()
         optimizer.step()
         pred = output.argmax(dim=1, keepdim=True)
-        correct = pred.eq(target.view_as(pred)).sum().item()
         if True: #batch_idx % args.log_interval == 0:
             print('Train Epoch: {}/{} [{}/{} ({:.0f}%)]\tLoss: {:.6f}\tKL Loss: {:.6f}\tEntropy : {:.6f}'.format(
                 epoch, args.epochs, batch_idx * args.batch_size,
@@ -287,7 +307,18 @@ def train(epoch, loader):
                 loss_func(output, target).item(), 
                 kl_divergence(model, z).item(),
                 -negentropy_loss(model, z).item()))
-            print(f'Correct :{100 * correct / args.batch_size}')
+            print(f'Correct :{100 * pred.eq(target.view_as(pred)).sum().item() / args.batch_size}')
+        train_loss += loss_func(output, target).item()
+        kl_loss += kl_divergence(model, z).item()
+        entropy -= negentropy_loss(model, z).item()
+        # get the index of the max log-probability
+        #pred = output.max(1, keepdim=True)[1]
+        correct += pred.eq(target.view_as(pred)).sum().item()
+    train_loss /= batch_idx
+    kl_loss /= batch_idx
+    entropy /= batch_idx
+    correct /= len(dataloader['train'].dataset)
+    return correct, train_loss, kl_loss, entropy
 
 
 def test(loader):
@@ -327,7 +358,7 @@ def test(loader):
 
 
 lr = 1e-4
-LAMBDA = 1e-4
+LAMBDA = 1e-2
 
 args.epochs = 150
 radius = 0.1
@@ -359,39 +390,56 @@ loss_func = nn.CrossEntropyLoss()
 #std_axe = np.exp(np.linspace(log_std_min, log_std_max, args.epochs))
 #std_axe = np.linspace(1e-2, .5, args.epochs)
 
-acc = []
-loss = []
-kl_loss = []
-entropy = []
+train_acc = []
+train_loss = []
+train_kl_loss = []
+train_entropy = []
+test_acc = []
+test_loss = []
+test_kl_loss = []
+test_entropy = []
     
 model = Grid_AttentionTransNet(do_stn=True, LAMBDA=LAMBDA, deterministic=True).to(device)
 optimizer = optim.Adam(model.fc_what.parameters(), lr=lr)
 
 #model = torch.load(f"230107_logPolarGrid_vgg_stn_WHAT.pt")
 model = torch.load("../JNJER/230105_logPolarGrid_vgg_stn_WHAT.pt")
+#model = torch.load("../JNJER/230105_logPolarGrid_vgg_stn_wide_WHAT.pt")
 model.LAMBDA = LAMBDA
 
 for epoch in range(args.epochs):
     if epoch % 2 == 1:
+        lr = 3e-6
         model.deterministic=True
         optimizer = optim.Adam(model.mu.parameters(), lr=lr)
     else:
+        lr = 1e-4
         model.deterministic=False
         optimizer = optim.Adam(model.fc_what.parameters(), lr=lr)
         
     args.radius = radius #std_axe[epoch]
-    train(epoch, dataloader['train'])
-    curr_acc, curr_loss, curr_kl_loss, curr_entropy = test(dataloader['test'])
-    acc.append(curr_acc)
-    loss.append(curr_loss)
-    kl_loss.append(curr_kl_loss)
-    entropy.append(curr_entropy)
+    acc, loss, kl_loss, entropy = train(epoch, dataloader['train'])
+    train_acc.append(acc)
+    train_loss.append(loss)
+    train_kl_loss.append(kl_loss)
+    train_entropy.append(entropy)
+    acc, loss, kl_loss, entropy = test(dataloader['test'])
+    test_acc.append(acc)
+    test_loss.append(loss)
+    test_kl_loss.append(kl_loss)
+    test_entropy.append(entropy)
     torch.save(model, f"230221_logPolarGrid_vgg_stn_{LAMBDA}_{args.radius}.pt")
-    np.save(f"230221_logPolarGrid_vgg_stn_{LAMBDA}_{args.radius}_acc", acc)
-    np.save(f"230221_logPolarGrid_vgg_stn_{LAMBDA}_{args.radius}_loss", loss)
-    np.save(f"230221_logPolarGrid_vgg_stn_{LAMBDA}_{args.radius}_kl_loss", kl_loss)
-    np.save(f"230221_logPolarGrid_vgg_stn_{LAMBDA}_{args.radius}_entropy", entropy)
-    
+    with open(f"230221_logPolarGrid_vgg_stn_{LAMBDA}_{args.radius}.pkl", "wb") as f:
+        train_data = {
+                "train_acc" : train_acc,
+                "train_loss" : train_loss,
+                "train_kl_loss" : train_kl_loss,
+                "train_entropy" : train_entropy,
+                "test_acc" : test_acc,
+                "test_loss" : test_loss,
+                "test_kl_loss" : test_kl_loss,
+                "test_entropy" : test_entropy}
+        pickle.dump(train_data, f)
     
 model.cpu()
 torch.cuda.empty_cache()
