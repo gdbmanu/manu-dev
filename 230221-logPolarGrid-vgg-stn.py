@@ -51,9 +51,9 @@ transform_base =  transforms.Compose([
 # In[8]:
 
 #image_path = "/envau/work/brainets/dauce.e/data/animal/"
-image_path = "/media/manu/Seagate Expansion Drive/Data/animal/"
+#image_path = "/media/manu/Seagate Expansion Drive/Data/animal/"
 #image_path = "/run/user/1001/gvfs/sftp:host=bag-008-de03/envau/work/brainets/dauce.e/data/animal/"
-#image_path = "../data/animal/"
+image_path = "../data/animal.0/"
 
 image_dataset = { 'train' : datasets.ImageFolder(
                             image_path+'train',
@@ -198,20 +198,19 @@ class Grid_AttentionTransNet(nn.Module):
         logPolx = x #F.grid_sample(x, self.where_grid)
         
         if self.do_stn:
-            if True: #
-                with torch.no_grad():
-                    y = self.vgg_where(logPolx)
-                mu = self.mu(y)
-                                   
-                if self.deterministic:
-                    sigma = args.radius * torch.ones_like(mu)
-                    self.q = torch.distributions.Normal(mu, sigma)  
-                    z = mu
-                else:
-                    logvar = self.logvar(y) + 5
-                    sigma = torch.exp(-logvar / 2)
-                    self.q = torch.distributions.Normal(mu, sigma)      
-                    z = self.q.rsample()
+            with torch.no_grad():
+                y = self.vgg_where(logPolx)
+            mu = self.mu(y)
+                               
+            if self.deterministic:
+                sigma = args.radius * torch.ones_like(mu)
+                self.q = torch.distributions.Normal(mu, sigma)  
+                z = mu
+            else:
+                logvar = self.logvar(y) + 5
+                sigma = torch.exp(-logvar / 2)
+                self.q = torch.distributions.Normal(mu, sigma)      
+                z = self.q.rsample()
             print(z[0,...])
             theta = torch.cat((self.downscale.unsqueeze(0).repeat(
                                 z.size(0), 1, 1), z.unsqueeze(2)),
@@ -286,7 +285,7 @@ def train(epoch, loader):
                 len(dataloader['train'].dataset),
                 100. * batch_idx / len(dataloader['train']), 
                 loss_func(output, target).item(), 
-                kl_divergence(model, z, mu, sigma).item(),
+                kl_divergence(model, z).item(),
                 -negentropy_loss(model, z).item()))
             print(f'Correct :{100 * correct / args.batch_size}')
 
@@ -307,7 +306,7 @@ def test(loader):
             # sum up batch loss
             #test_loss += F.nll_loss(output, target, size_average=False).item()
             test_loss += loss_func(output, target).item()
-            kl_loss += kl_divergence(model, z, mu, sigma).item()
+            kl_loss += kl_divergence(model, z).item()
             entropy -= negentropy_loss(model, z).item()
             # get the index of the max log-probability
             #pred = output.max(1, keepdim=True)[1]
@@ -354,7 +353,6 @@ loss_func = nn.CrossEntropyLoss()
 # In[ ]:
 
 
-
 #log_std_min = -4
 #log_std_max = -2
 
@@ -369,8 +367,9 @@ entropy = []
 model = Grid_AttentionTransNet(do_stn=True, LAMBDA=LAMBDA, deterministic=True).to(device)
 optimizer = optim.Adam(model.fc_what.parameters(), lr=lr)
 
-model = torch.load(f"230107_logPolarGrid_vgg_stn_WHAT.pt")
-
+#model = torch.load(f"230107_logPolarGrid_vgg_stn_WHAT.pt")
+model = torch.load("../JNJER/230105_logPolarGrid_vgg_stn_WHAT.pt")
+model.LAMBDA = LAMBDA
 
 for epoch in range(args.epochs):
     if epoch % 2 == 1:
