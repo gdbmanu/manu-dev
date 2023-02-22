@@ -198,7 +198,6 @@ class Grid_AttentionTransNet(nn.Module):
         logPolx = x #F.grid_sample(x, self.where_grid)
         
         if self.do_stn:
-<<<<<<< HEAD
             with torch.no_grad():
                 y = self.vgg_where(logPolx)
             mu = self.mu(y)
@@ -212,22 +211,6 @@ class Grid_AttentionTransNet(nn.Module):
                 sigma = torch.exp(-logvar / 2)
                 self.q = torch.distributions.Normal(mu, sigma)      
                 z = self.q.rsample()
-=======
-            if True: #
-                with torch.no_grad():
-                    y = self.vgg_where(logPolx)
-                mu = self.mu(y)
-                                   
-                if self.deterministic:
-                    sigma = args.radius * torch.ones_like(mu)
-                    self.q = torch.distributions.Normal(mu, sigma)  
-                    z = mu
-                else:
-                    logvar = self.logvar(y) + 4
-                    sigma = torch.exp(-logvar / 2)
-                    self.q = torch.distributions.Normal(mu, sigma)      
-                    z = self.q.rsample()
->>>>>>> 3d552ca7428cd6487ef267ccf0a6a3fa87d4b8d1
             print(z[0,...])
             theta = torch.cat((self.downscale.unsqueeze(0).repeat(
                                 z.size(0), 1, 1), z.unsqueeze(2)),
