@@ -420,7 +420,8 @@ for epoch in range(args.epochs):
                 "test_acc" : test_acc,
                 "test_loss" : test_loss,
                 "test_kl_loss" : test_kl_loss,
-                "test_entropy" : test_entropy}
+                "test_entropy" : test_entropy
+                }
         pickle.dump(train_data, f)
     
 model.cpu()
