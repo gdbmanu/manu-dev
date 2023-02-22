@@ -19,8 +19,6 @@ from typing import List, Tuple
 
 import pickle
 
-
-
 width = {'in': 32, 'out': 64, 'ext': 128}
 
 n_levels = {'in': 3, 'out': 3, 'ext': 3} 
@@ -188,9 +186,9 @@ transform_big =  transforms.Compose([
 
 
 #image_path = "/envau/work/brainets/dauce.e/data/animal/"
-image_path = "/media/manu/Seagate Expansion Drive/Data/animal/"
+#image_path = "/media/manu/Seagate Expansion Drive/Data/animal/"
 #image_path = "/run/user/1001/gvfs/sftp:host=bag-008-de03/envau/work/brainets/dauce.e/data/animal/"
-#image_path = "../data/animal/"
+image_path = "../data/animal/"
 
 image_dataset = { 'train' : datasets.ImageFolder(
                             image_path+'train', 
@@ -481,7 +479,7 @@ def train(epoch, loader, n_sample_train):
         if True: #batch_idx % args.log_interval == 0:
             print('Train Epoch: {}/{} [{}/{} ({:.0f}%)]\tLoss: {:.6f}\tKL Loss: {:.6f}\tEntropy bonus: {:.6f}'.format(
                 epoch, 
-                n_sample_train, 
+                args.epochs, 
                 num_batch * args.batch_size,
                 n_sample_train * args.batch_size,
                 100. * num_batch / n_sample_train, 
@@ -545,7 +543,7 @@ def test(loader, n_sample_test):
                      kl_loss, 
                      entropy)
                 )
-        return  test_loss, kl_loss, entropy
+        return correct, test_loss, kl_loss, entropy
 
 
 lr = 1e-4
