@@ -386,8 +386,8 @@ class Polo_AttentionTransNet(nn.Module):
             sigma = sigma.unsqueeze(0).repeat(x.size()[0], 1)    
             
             if self.do_what:
-                self.q = torch.distributions.Normal(mu, 0.3*sigma)
-                z = self.q.rsample()
+                self.q = torch.distributions.Normal(mu, args.radius*sigma)
+                z = self.q.rsample().to(device)
                 print(z[0,...])
                 theta = torch.cat((self.downscale.unsqueeze(0).repeat(
                                 z.size(0), 1, 1), z.unsqueeze(2)),
@@ -458,6 +458,9 @@ def train(epoch, loader, n_sample_train):
     kl_loss = 0
     entropy = 0
     correct = 0
+    if n_sample_train is None:
+        n_sample_train = len(image_dataset['train']) // args.batch_size
+        print(f'n_sample_train : {n_sample_train}')
     for num_batch, (data, target) in enumerate(loader):
 
         data_original, data_polo = data[0], data[1]
@@ -480,9 +483,9 @@ def train(epoch, loader, n_sample_train):
             print('Train Epoch: {}/{} [{}/{} ({:.0f}%)]\tLoss: {:.6f}\tKL Loss: {:.6f}\tEntropy bonus: {:.6f}'.format(
                 epoch, 
                 args.epochs, 
-                num_batch * args.batch_size,
+                (num_batch+1) * args.batch_size,
                 n_sample_train * args.batch_size,
-                100. * num_batch / n_sample_train, 
+                100. * (num_batch+1) / n_sample_train, 
                 loss_func(output, target).item(), 
                 kl_divergence(model, z).item(),
                 -negentropy_loss(model, z).item()))
@@ -507,7 +510,9 @@ def test(loader, n_sample_test):
         test_loss = 0
         kl_loss = 0
         entropy = 0
-        correct = 0
+        correct = 0 
+        if n_sample_test is None:
+            n_sample_test = len(image_dataset['test']) // args.batch_size
         model.deterministic = True
         for num_batch, (data, target) in enumerate(loader):
             data_original, data_polo = data[0], data[1]
@@ -542,7 +547,7 @@ def test(loader, n_sample_test):
                      100. * correct,
                      kl_loss, 
                      entropy)
-              )
+                )
         return correct, test_loss, kl_loss, entropy
 
 
@@ -553,9 +558,9 @@ deterministic = True
 if __name__ == '__main__':
 
 
-    device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
+    device = torch.device("cuda:1" if torch.cuda.is_available() else "cpu")
+    #model = torch.load("../models/low_comp_polo_stn.pt")
     model = Polo_AttentionTransNet(LAMBDA=LAMBDA, deterministic=deterministic).to(device)
-    model = torch.load("out/230222_polo_stn_dual_WHAT_0.5.pt", map_location=device)
 
 
     optimizer = optim.Adam(model.parameters(), lr=lr)
@@ -567,7 +572,7 @@ if __name__ == '__main__':
     # In[35]:
 
     args.epochs = 150
-    args.radius = 0.2
+    args.radius = 0.5
 
     model.do_stn = True
     
@@ -582,34 +587,20 @@ if __name__ == '__main__':
 
     for epoch in range(args.epochs):
         
-        model.do_stn = True
-        model.do_what = False
-        n_sample_test = 15
+        model.do_stn = False
+        model.do_what = True
+        n_sample_test = None
 
         params = []
-        if epoch % 2 == 1:
-            model.deterministic=True
-            n_sample_train = 5
-            params.extend(list(model.loc0.parameters()))
-            params.extend(list(model.loc1a.parameters()))
-            params.extend(list(model.loc1b.parameters()))
-            params.extend(list(model.loc2a.parameters()))
-            params.extend(list(model.loc2b.parameters()))
-            params.extend(list(model.loc2c.parameters()))
-            params.extend(list(model.loc3.parameters()))
-            params.extend(list(model.mu.parameters()))
-            #params.extend(list(model.logvar.parameters()))
-        else:
-            model.deterministic=False
-            n_sample_train = 50
-            params.extend(list(model.wloc0.parameters()))
-            params.extend(list(model.wloc1a.parameters()))
-            params.extend(list(model.wloc1b.parameters()))
-            params.extend(list(model.wloc2a.parameters()))
-            params.extend(list(model.wloc2b.parameters()))
-            params.extend(list(model.wloc2c.parameters()))
-            params.extend(list(model.wloc3.parameters()))
-            params.extend(list(model.wloc4.parameters()))
+        n_sample_train = None
+        params.extend(list(model.wloc0.parameters()))
+        params.extend(list(model.wloc1a.parameters()))
+        params.extend(list(model.wloc1b.parameters()))
+        params.extend(list(model.wloc2a.parameters()))
+        params.extend(list(model.wloc2b.parameters()))
+        params.extend(list(model.wloc2c.parameters()))
+        params.extend(list(model.wloc3.parameters()))
+        params.extend(list(model.wloc4.parameters()))
 
         optimizer = optim.Adam(params, lr=lr)
 
@@ -624,8 +615,8 @@ if __name__ == '__main__':
         test_loss.append(loss)
         test_kl_loss.append(kl_loss)
         test_entropy.append(entropy)
-        torch.save(model, f"out/230222_polo_stn_dual_lambda_{LAMBDA}_{args.radius}.pt")
-        with open(f"out/230222_polo_stn_dual_lambda_{LAMBDA}_{args.radius}.pkl", "wb") as f:
+        torch.save(model, f"out/230224_polo_stn_dual_WHAT_{args.radius}.pt")
+        with open(f"out/230224_polo_stn_dual_WHAT_{args.radius}.pkl", "wb") as f:
             train_data = {
                 "train_acc" : train_acc,
                 "train_loss" : train_loss,
