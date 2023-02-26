@@ -50,10 +50,10 @@ transform_base =  transforms.Compose([
 
 # In[8]:
 
-image_path = "/envau/work/brainets/dauce.e/data/animal/"
+#image_path = "/envau/work/brainets/dauce.e/data/animal/"
 #image_path = "/media/manu/Seagate Expansion Drive/Data/animal/"
 #image_path = "/run/user/1001/gvfs/sftp:host=bag-008-de03/envau/work/brainets/dauce.e/data/animal/"
-#image_path = "../data/animal/"
+image_path = "../data/animal/"
 
 image_dataset = { 'train' : datasets.ImageFolder(
                             image_path+'train',
@@ -198,20 +198,19 @@ class Grid_AttentionTransNet(nn.Module):
         logPolx = x #F.grid_sample(x, self.where_grid)
         
         if self.do_stn:
-            if True: #
-                with torch.no_grad():
-                    y = self.vgg_where(logPolx)
-                mu = self.mu(y)
-                                   
-                if self.deterministic:
-                    sigma = args.radius * torch.ones_like(mu)
-                    self.q = torch.distributions.Normal(mu, sigma)  
-                    z = mu
-                else:
-                    logvar = self.logvar(y) + 4
-                    sigma = torch.exp(-logvar / 2)
-                    self.q = torch.distributions.Normal(mu, sigma)      
-                    z = self.q.rsample()
+            with torch.no_grad():
+                y = self.vgg_where(logPolx)
+            mu = self.mu(y)
+                               
+            if self.deterministic:
+                sigma = args.radius * torch.ones_like(mu)
+                self.q = torch.distributions.Normal(mu, sigma)  
+                z = mu
+            else:
+                logvar = self.logvar(y) + 5
+                sigma = torch.exp(-logvar / 2)
+                self.q = torch.distributions.Normal(mu, sigma)      
+                z = self.q.rsample()
             print(z[0,...])
             theta = torch.cat((self.downscale.unsqueeze(0).repeat(
                                 z.size(0), 1, 1), z.unsqueeze(2)),
@@ -368,7 +367,6 @@ loss_func = nn.CrossEntropyLoss()
 # In[ ]:
 
 
-
 #log_std_min = -4
 #log_std_max = -2
 
@@ -388,14 +386,17 @@ model = Grid_AttentionTransNet(do_stn=True, LAMBDA=LAMBDA, deterministic=True).t
 optimizer = optim.Adam(model.fc_what.parameters(), lr=lr)
 
 #model = torch.load(f"230107_logPolarGrid_vgg_stn_WHAT.pt")
-model = torch.load("../JNJER/230105_logPolarGrid_vgg_stn_wide_WHAT.pt")
+model = torch.load("../JNJER/230105_logPolarGrid_vgg_stn_WHAT.pt")
+#model = torch.load("../JNJER/230105_logPolarGrid_vgg_stn_wide_WHAT.pt")
 model.LAMBDA = LAMBDA
 
 for epoch in range(args.epochs):
     if epoch % 2 == 1:
+        lr = 3e-6
         model.deterministic=True
         optimizer = optim.Adam(model.mu.parameters(), lr=lr)
     else:
+        lr = 1e-4
         model.deterministic=False
         optimizer = optim.Adam(model.fc_what.parameters(), lr=lr)
         
