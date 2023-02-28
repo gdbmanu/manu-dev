@@ -297,15 +297,15 @@ class Polo_AttentionTransNet(nn.Module):
                               50, 3, padding=1)
         self.wloc1a = nn.Conv2d(50, 100, 3, padding=1)
         self.wloc1b = nn.Conv2d(n_color['out'] * n_theta['out'] * n_phase['out'], 
-                              50, 3, padding=1)
+                              100, 3, padding=1)
         self.wloc2a = nn.Conv2d(100, 200, 3, padding=1)
-        self.wloc2b = nn.Conv2d(50, 100, 3, padding=1)
+        self.wloc2b = nn.Conv2d(100, 200, 3, padding=1)
         self.wloc2c = nn.Conv2d(n_color['in'] * n_theta['in'] * n_phase['in'], 
-                               50, 3, padding=1)
-        self.wloc3 = nn.Linear((n_levels['in']-1) * n_eccentricity['in'] // 2 * n_azimuth['in'] // 2 * (50+100+200), 
-                              1000)
-        self.wloc4 = nn.Linear(1000, 1000)
-        self.wloc5 = nn.Linear(1000, 2)
+                               200, 3, padding=1)
+        self.wloc3 = nn.Conv2d(200, 500, 3, padding=1)
+        self.wloc4 = nn.Conv2d(500, 1000, 3, padding=1)
+        self.wloc5 = nn.Linear(1000 * (((n_levels['in']-1) * n_eccentricity['in'] * 3) // 8 * n_azimuth['in'] // 8), 1000)
+        self.wloc6 = nn.Linear(1000, 2)
 
         #self.wloc4.weight.data.zero_()
         #self.wloc4.bias.data.zero_()
@@ -319,10 +319,8 @@ class Polo_AttentionTransNet(nn.Module):
                               50, 5, padding=2, stride=2)
         self.loc2a = nn.Conv2d(100, 200, 5, padding=2, stride=2)
         self.loc2b = nn.Conv2d(50, 100, 5, padding=2,stride=2)
-        self.loc2c = nn.Conv2d(n_color['in'] * n_theta['in'] * n_phase['in'], 
-                               50, 5, padding=2,stride=2)
-        self.loc3 = nn.Linear((n_levels['in']-1) * n_eccentricity['in'] // 2 * n_azimuth['in'] // 2 * (50+100+200), 
-                              1000)
+        self.loc2c = nn.Conv2d(n_color['in'] * n_theta['in'] * n_phase['in'], 50, 5, padding=2,stride=2)
+        self.loc3 = nn.Linear((n_levels['in']-1) * n_eccentricity['in'] // 2 * n_azimuth['in'] // 2 * (50+100+200), 1000)
         self.loc4 = nn.Linear(1000, 1000)
         self.mu = nn.Linear(1000, 2, bias=False)
         self.logvar = nn.Linear(1000, 2, bias=False)
@@ -361,8 +359,7 @@ class Polo_AttentionTransNet(nn.Module):
                 xsc = F.relu(self.loc2c(x_polo['in']))
                 
                 xs = torch.cat((xsa, xsb, xsc), dim=1)
-            xs = F.relu(self.loc3(xs.view(-1, 
-                                          (50+100+200) * (n_levels['in']-1) * n_eccentricity['in'] // 2 * n_azimuth['in'] // 2)))
+            xs = F.relu(self.loc3(xs.view(-1, (50+100+200) * (n_levels['in']-1) * n_eccentricity['in'] // 2 * n_azimuth['in'] // 2)))
             #theta = F.sigmoid(self.loc4(xs)) - 0.5
             #theta = self.loc4(xs)
             xs = F.relu(self.loc4(xs))
@@ -452,12 +449,18 @@ class Polo_AttentionTransNet(nn.Module):
         yc = F.relu(self.wloc2c(w_x_polo['in']))
         yc = nn.MaxPool2d(2)(yc)
         
-        #print(xsb.shape)
 
-        y = torch.cat((ya, yb, yc), dim=1)
-        y = F.relu(self.wloc3(y.view(-1, (50+100+200) * (n_levels['in']-1) * n_eccentricity['in'] // 2 * n_azimuth['in'] // 2)))
-        y = self.wloc4(y)
-        y = self.wloc5(y)
+        y = torch.cat((ya, yb, yc), dim=2)
+        y = F.relu(self.wloc3(y))
+        y = nn.MaxPool2d(2)(y)
+        y = F.relu(self.wloc4(y))
+        y = nn.MaxPool2d((3,2))(y)
+
+        #print(y.shape)
+        #print(1000 * (((n_levels['in']-1) * n_eccentricity['in'] * 3) // 8 * n_azimuth['in'] // 8))
+
+        y = F.relu(self.wloc5(y.view(-1, 1000 * (((n_levels['in']-1) * n_eccentricity['in'] * 3) // 8 * n_azimuth['in'] // 8))))
+        y = self.wloc6(y)
         return y, theta, z
 
 def train(epoch, loader, n_sample_train):
@@ -610,6 +613,7 @@ if __name__ == '__main__':
         params.extend(list(model.wloc3.parameters()))
         params.extend(list(model.wloc4.parameters()))
         params.extend(list(model.wloc5.parameters()))
+        params.extend(list(model.wloc6.parameters()))
 
         optimizer = optim.Adam(params, lr=lr)
 
@@ -624,8 +628,8 @@ if __name__ == '__main__':
         test_loss.append(loss)
         test_kl_loss.append(kl_loss)
         test_entropy.append(entropy)
-        torch.save(model, f"out/230226_polo_stn_dual_WHAT_{args.radius}.pt")
-        with open(f"out/230226_polo_stn_dual_WHAT_{args.radius}.pkl", "wb") as f:
+        torch.save(model, f"out/230302_polo_stn_dual_WHAT_{args.radius}.pt")
+        with open(f"out/230302_polo_stn_dual_WHAT_{args.radius}.pkl", "wb") as f:
             train_data = {
                 "train_acc" : train_acc,
                 "train_loss" : train_loss,
