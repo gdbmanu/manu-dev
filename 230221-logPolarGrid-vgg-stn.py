@@ -98,7 +98,7 @@ def negentropy_loss(model, z):
     z_mean = torch.mean(z, dim=0)
     z_std = torch.std(z, dim=0)
     p = torch.distributions.Normal(torch.ones_like(z)*z_mean, torch.ones_like(z) * z_std)
-    return model.LAMBDA * p.log_prob(z).sum()
+    return p.log_prob(z).sum()
 
 def kl_divergence(model, z):
     # --------------------------
@@ -208,7 +208,7 @@ class Grid_AttentionTransNet(nn.Module):
                     self.q = torch.distributions.Normal(mu, sigma)  
                     z = mu
                 else:
-                    logvar = self.logvar(y) + 4
+                    logvar = self.logvar(y) + 6
                     sigma = torch.exp(-logvar / 2)
                     self.q = torch.distributions.Normal(mu, sigma)      
                     z = self.q.rsample()
@@ -298,9 +298,9 @@ def train(epoch, loader):
         # get the index of the max log-probability
         #pred = output.max(1, keepdim=True)[1]
         correct += pred.eq(target.view_as(pred)).sum().item()
-    train_loss /= batch_idx
-    kl_loss /= batch_idx
-    entropy /= batch_idx
+    train_loss /= (batch_idx+1)
+    kl_loss /= (batch_idx+1)
+    entropy /= (batch_idx+1)
     correct /= len(dataloader['train'].dataset)
     return correct, train_loss, kl_loss, entropy
 
@@ -328,9 +328,9 @@ def test(loader):
             pred = output.argmax(dim=1, keepdim=True)
             correct += pred.eq(target.view_as(pred)).sum().item()
 
-        test_loss /= n
-        kl_loss /= n
-        entropy /= n
+        test_loss /= (n+1)
+        kl_loss /= (n+1)
+        entropy /= (n+1)
         print('\nTest set: CE loss: {:.4f}, Accuracy: {}/{} ({:.0f}%), KL loss: {:.4f}, Entropy: {:.4f}\n'.
               format(test_loss, correct, len(dataloader['test'].dataset),
                      100. * correct / len(dataloader['test'].dataset),
@@ -342,10 +342,10 @@ def test(loader):
 
 
 lr = 1e-4
-LAMBDA = 1e-2
+LAMBDA = 0 #1e-3
 
 args.epochs = 150
-radius = 0.1
+radius = 1
 
 # In[30]:
 
@@ -394,9 +394,11 @@ model.LAMBDA = LAMBDA
 for epoch in range(args.epochs):
     if epoch % 2 == 1:
         model.deterministic=True
+        lr = 3e-6
         optimizer = optim.Adam(model.mu.parameters(), lr=lr)
     else:
         model.deterministic=False
+        lr = 1e-4
         optimizer = optim.Adam(model.fc_what.parameters(), lr=lr)
         
     args.radius = radius #std_axe[epoch]
@@ -410,8 +412,8 @@ for epoch in range(args.epochs):
     test_loss.append(loss)
     test_kl_loss.append(kl_loss)
     test_entropy.append(entropy)
-    torch.save(model, f"230221_logPolarGrid_vgg_stn_{LAMBDA}_{args.radius}.pt")
-    with open(f"230221_logPolarGrid_vgg_stn_{LAMBDA}_{args.radius}.pkl", "wb") as f:
+    torch.save(model, f"out/230221_logPolarGrid_vgg_stn_{LAMBDA}_{args.radius}.pt")
+    with open(f"out/230221_logPolarGrid_vgg_stn_{LAMBDA}_{args.radius}.pkl", "wb") as f:
         train_data = {
                 "train_acc" : train_acc,
                 "train_loss" : train_loss,
