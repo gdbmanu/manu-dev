@@ -254,7 +254,11 @@ transform_in =  transforms.Compose([
 def negentropy_loss(model, z):
     z_mean = torch.mean(z, dim=0)
     z_std = torch.std(z, dim=0)
-    p = torch.distributions.Normal(torch.ones_like(z)*z_mean, torch.ones_like(z) * z_std)
+    if False: #torch.mean(z_std).item() > 1e-6:
+        p = torch.distributions.Normal(torch.ones_like(z)*z_mean, torch.ones_like(z) * z_std)
+    else:
+        p = torch.distributions.Normal(torch.zeros_like(z), torch.ones_like(z))
+    #p = torch.distributions.Normal(torch.ones_like(z)*z_mean, torch.ones_like(z) * z_std)
     return p.log_prob(z).sum()
 
 def kl_divergence(model, z):
@@ -262,7 +266,10 @@ def kl_divergence(model, z):
     # Monte carlo KL divergence
     # --------------------------
     # 1. define the first two probabilities (in this case Normal for both)
-    p = torch.distributions.Normal(torch.zeros_like(z), args.radius * torch.ones_like(z))
+    try:
+        p = torch.distributions.Normal(torch.zeros_like(z), args.radius * torch.ones_like(z))
+    except:
+        p = torch.distributions.Normal(torch.zeros_like(z), torch.ones_like(z))
 
     # 2. get the probabilities from the equation
     #log_qzx = model.q.log_prob(z)
@@ -270,7 +277,11 @@ def kl_divergence(model, z):
 
     z_mean = torch.mean(z, dim=0)
     z_std = torch.std(z, dim=0)
-    q = torch.distributions.Normal(torch.ones_like(z)*z_mean, torch.ones_like(z) * z_std)
+    print(z_std)
+    if False: #torch.mean(z_std).item() > 1e-6:
+        q = torch.distributions.Normal(torch.ones_like(z)*z_mean, torch.ones_like(z) * z_std)
+    else:
+        q = torch.distributions.Normal(torch.zeros_like(z), torch.ones_like(z))
     log_qzx = q.log_prob(z)
 
     # kl
@@ -483,6 +494,7 @@ def train(epoch, loader, n_sample_train):
         
         optimizer.zero_grad()
         output, theta, z = model(data_original, data_polo)
+        print(f'model.deteministic:{model.deterministic}')
         if model.do_stn and model.deterministic:
             loss = loss_func(output, target) + kl_divergence(model, z) #+ negentropy_loss(model, z)
         else:
@@ -565,6 +577,7 @@ def test(loader, n_sample_test):
 lr = 1e-4
 LAMBDA = 1e-4
 deterministic = True
+do_stn = False
 
 if __name__ == '__main__':
 
@@ -596,26 +609,25 @@ if __name__ == '__main__':
     test_kl_loss = []
     test_entropy = []
 
+    params = []
+    n_sample_train = None
+    params.extend(list(model.wloc0.parameters()))
+    params.extend(list(model.wloc1a.parameters()))
+    params.extend(list(model.wloc1b.parameters()))
+    params.extend(list(model.wloc2a.parameters()))
+    params.extend(list(model.wloc2b.parameters()))
+    params.extend(list(model.wloc2c.parameters()))
+    params.extend(list(model.wloc3.parameters()))
+    params.extend(list(model.wloc4.parameters()))
+    params.extend(list(model.wloc5.parameters()))
+    params.extend(list(model.wloc6.parameters()))
+
+    optimizer = optim.Adam(params, lr=lr)
     for epoch in range(args.epochs):
         
         model.do_stn = False
         model.do_what = False
         n_sample_test = None
-
-        params = []
-        n_sample_train = None
-        params.extend(list(model.wloc0.parameters()))
-        params.extend(list(model.wloc1a.parameters()))
-        params.extend(list(model.wloc1b.parameters()))
-        params.extend(list(model.wloc2a.parameters()))
-        params.extend(list(model.wloc2b.parameters()))
-        params.extend(list(model.wloc2c.parameters()))
-        params.extend(list(model.wloc3.parameters()))
-        params.extend(list(model.wloc4.parameters()))
-        params.extend(list(model.wloc5.parameters()))
-        params.extend(list(model.wloc6.parameters()))
-
-        optimizer = optim.Adam(params, lr=lr)
 
         acc, loss, kl_loss, entropy = train(epoch, dataloader['train'], n_sample_train)
         train_acc.append(acc)
