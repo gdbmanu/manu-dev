@@ -190,9 +190,9 @@ polo_transform =  transforms.Compose([
 
 
 #image_path = "/envau/work/brainets/dauce.e/data/animal/"
-#image_path = "/media/manu/Seagate Expansion Drive/Data/animal/"
+image_path = "/media/manu/Seagate Expansion Drive/Data/animal/"
 #image_path = "/run/user/1001/gvfs/sftp:host=bag-008-de03/envau/work/brainets/dauce.e/data/animal/"
-image_path = "../data/animal/"
+#image_path = "../data/animal/"
 
 image_dataset = { 'train' : datasets.ImageFolder(
                             image_path+'train', 
@@ -314,9 +314,9 @@ class Polo_AttentionTransNet(nn.Module):
                                200, 3, padding=1)
         self.wloc3 = nn.Conv2d(200, 500, 3, padding=1)
         self.wloc4 = nn.Conv2d(500, 1000, 3, padding=1)
-        self.wloc5_short = nn.Linear(1000 * (((n_levels['in']-1) * n_eccentricity['in'] * 3) // 8 * n_azimuth['in'] // 8), 2)
+        self.wloc5_short = nn.Linear(1000 * (((n_levels['in']-1) * n_eccentricity['in'] * 3) // 8 * n_azimuth['in'] // 8), 2, bias=False)
         self.wloc5 = nn.Linear(1000 * (((n_levels['in']-1) * n_eccentricity['in'] * 3) // 8 * n_azimuth['in'] // 8), 1000)
-        self.wloc6 = nn.Linear(1000, 2)
+        self.wloc6 = nn.Linear(1000, 2, bias=False)
 
         #self.wloc4.weight.data.zero_()
         #self.wloc4.bias.data.zero_()
@@ -427,7 +427,7 @@ class Polo_AttentionTransNet(nn.Module):
         # transform the input
         x, theta, z = self.stn(x, x_polo)
         
-        if self.do_stn:
+        if self.do_stn or (self.do_what and args.radius > 0):
         
             w_x_polo ={'in': torch.zeros_like(x_polo['in']),
                        'out': torch.zeros_like(x_polo['out']),
@@ -469,7 +469,9 @@ class Polo_AttentionTransNet(nn.Module):
         #print(y.shape)
         #print(1000 * (((n_levels['in']-1) * n_eccentricity['in'] * 3) // 8 * n_azimuth['in'] // 8))
         if training_step == 0:
-            y = F.relu(self.wloc5_short(y.view(-1, 1000 * (((n_levels['in']-1) * n_eccentricity['in'] * 3) // 8 * n_azimuth['in'] // 8))))
+            y = y.view(-1, 1000 * (((n_levels['in']-1) * n_eccentricity['in'] * 3) // 8 * n_azimuth['in'] // 8))
+            y = self.wloc5_short(y)
+            y = F.relu(y)
         else:
             y = F.relu(self.wloc5(y.view(-1, 1000 * (((n_levels['in']-1) * n_eccentricity['in'] * 3) // 8 * n_azimuth['in'] // 8))))
             y = self.wloc6(y)
@@ -496,7 +498,6 @@ def train(epoch, loader, n_sample_train, training_step):
         
         optimizer.zero_grad()
         output, theta, z = model(data_original, data_polo, training_step)
-        print(f'model.deteministic:{model.deterministic}')
         if model.do_stn and model.deterministic:
             loss = loss_func(output, target) + kl_divergence(model, z) #+ negentropy_loss(model, z)
         else:
@@ -622,7 +623,7 @@ if __name__ == '__main__':
         params = []
         n_sample_train = None
         
-        if epoch % 2 == 0:
+        if True: #epoch % 2 == 0:
             params.extend(list(model.wloc0.parameters()))
             params.extend(list(model.wloc1b.parameters()))
             params.extend(list(model.wloc2c.parameters()))
@@ -638,13 +639,14 @@ if __name__ == '__main__':
 
         optimizer = optim.Adam(params, lr=lr)
 
-        acc, loss, kl_loss, entropy = train(epoch, dataloader['train'], n_sample_train, training_step = epoch%3)
+        training_step = 0
+        acc, loss, kl_loss, entropy = train(epoch, dataloader['train'], n_sample_train, training_step = training_step)
         train_acc.append(acc)
         train_loss.append(loss)
         train_kl_loss.append(kl_loss)
         train_entropy.append(entropy)
 
-        acc, loss, kl_loss, entropy = test(dataloader['test'], n_sample_test, training_step = epoch % 3)
+        acc, loss, kl_loss, entropy = test(dataloader['test'], n_sample_test, training_step = training_step)
         test_acc.append(acc)
         test_loss.append(loss)
         test_kl_loss.append(kl_loss)
