@@ -471,7 +471,6 @@ class Polo_AttentionTransNet(nn.Module):
         if training_step == 0:
             y = y.view(-1, 1000 * (((n_levels['in']-1) * n_eccentricity['in'] * 3) // 8 * n_azimuth['in'] // 8))
             y = self.wloc5_short(y)
-            y = F.relu(y)
         else:
             y = F.relu(self.wloc5(y.view(-1, 1000 * (((n_levels['in']-1) * n_eccentricity['in'] * 3) // 8 * n_azimuth['in'] // 8))))
             y = self.wloc6(y)
