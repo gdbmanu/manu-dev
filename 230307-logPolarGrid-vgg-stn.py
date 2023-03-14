@@ -50,10 +50,10 @@ transform_base =  transforms.Compose([
 
 # In[8]:
 
-#image_path = "/envau/work/brainets/dauce.e/data/animal/"
+image_path = "/envau/work/brainets/dauce.e/data/animal/"
 #image_path = "/media/manu/Seagate Expansion Drive/Data/animal/"
 #image_path = "/run/user/1001/gvfs/sftp:host=bag-008-de03/envau/work/brainets/dauce.e/data/animal/"
-image_path = "../data/animal/"
+#image_path = "../data/animal/"
 
 image_dataset = { 'train' : datasets.ImageFolder(
                             image_path+'train',
@@ -195,7 +195,7 @@ class Grid_AttentionTransNet(nn.Module):
 
     def stn(self: object, x: torch.Tensor) -> Tuple[torch.Tensor]:
     
-        logPolx = x #F.grid_sample(x, self.where_grid)
+        logPolx = F.grid_sample(x, self.where_grid)
         
         if self.do_stn:
             with torch.no_grad():
@@ -411,8 +411,8 @@ for epoch in range(args.epochs):
     test_loss.append(loss)
     test_kl_loss.append(kl_loss)
     test_entropy.append(entropy)
-    torch.save(model, f"230305_logPolarGrid_vgg_stn_{LAMBDA}_{args.radius}.pt")
-    with open(f"230305_logPolarGrid_vgg_stn_{LAMBDA}_{args.radius}.pkl", "wb") as f:
+    torch.save(model, f"out/230307_logPolarGrid_vgg_stn_{LAMBDA}_{args.radius}.pt")
+    with open(f"out/230307_logPolarGrid_vgg_stn_{LAMBDA}_{args.radius}.pkl", "wb") as f:
         train_data = {
                 "train_acc" : train_acc,
                 "train_loss" : train_loss,
