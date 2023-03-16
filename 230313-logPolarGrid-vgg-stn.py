@@ -50,9 +50,9 @@ transform_base =  transforms.Compose([
 
 # In[8]:
 
-#image_path = "/envau/work/brainets/dauce.e/data/Imagenet/"
+image_path = "/envau/work/brainets/dauce.e/data/Imagenet/"
 #image_path = "/media/manu/Seagate Expansion Drive/Data/animal/"
-image_path = "/run/user/1001/gvfs/sftp:host=bag-008-de03/envau/work/brainets/dauce.e/data/Imagenet/"
+#image_path = "/run/user/1001/gvfs/sftp:host=bag-008-de03/envau/work/brainets/dauce.e/data/Imagenet/"
 #image_path = "../data/animal/"
 
 image_dataset = { 'train' : datasets.ImageFolder(
@@ -146,7 +146,7 @@ class Grid_AttentionTransNet(nn.Module):
         #features.extend([nn.Linear(num_features, 500)]) # Add our layer
         self.vgg.classifier = nn.Sequential(*features) # Replace the model classifier
         
-        self.what_grid = self.logPolarGrid(-4,-1) 
+        self.what_grid = self.logPolarGrid(-4,0) 
         
         n_features = torch.tensor(self.num_features, dtype=torch.float)
         
@@ -221,14 +221,15 @@ class Grid_AttentionTransNet(nn.Module):
             x = F.grid_sample(x, grid)
 
         else:
-            mu = torch.tensor([0, 0],dtype=torch.double)
+            mu = torch.tensor([0, 0],dtype=torch.float)
             mu = mu.unsqueeze(0).repeat(x.size()[0], 1)   
-            sigma = torch.tensor([1, 1],dtype=torch.double)
+            sigma = torch.tensor([1, 1],dtype=torch.float)
             sigma = sigma.unsqueeze(0).repeat(x.size()[0], 1)    
             
             if self.do_what:
                 self.q = torch.distributions.Normal(mu, args.radius * sigma)
-                z = self.q.rsample()
+                z = self.q.rsample().to(device)
+                #z = torch.FloatTensor(z).to(device)
                 print(z[0,...])
                 theta = torch.cat((self.downscale.unsqueeze(0).repeat(
                                 z.size(0), 1, 1), z.unsqueeze(2)),
@@ -362,12 +363,12 @@ model = Grid_AttentionTransNet(do_stn=False, do_what = True, LAMBDA=LAMBDA, dete
 optimizer = optim.Adam(model.fc_what.parameters(), lr=lr)
 
 save_path = "out/"
-f_name = f"230313_ImgNet_logPolarGrid_vgg_stn_WHAT_{radius}"
+f_name = f"230313_ImgNet_logPolarGrid_vgg_stn_WHAT_{radius}_wide"
 
 for epoch in range(args.epochs):
     
     args.radius = std_axe[epoch]
-    print(f'****** EPOCH : {epoch}/{arg.epochs}, radius = {args.radius} ******')
+    print(f'****** EPOCH : {epoch}/{args.epochs}, radius = {args.radius} ******')
     acc, loss, kl_loss, entropy = train(epoch, dataloader['train'])
     train_acc.append(acc)
     train_loss.append(loss)
