@@ -651,8 +651,10 @@ if __name__ == '__main__':
         test_loss.append(loss)
         test_kl_loss.append(kl_loss)
         test_entropy.append(entropy)
-        torch.save(model, f"out/230302bis_polo_stn_dual_WHAT_{radius}_{model.do_what}.pt")
-        with open(f"out/230302bis_polo_stn_dual_WHAT_{radius}_{model.do_what}.pkl", "wb") as f:
+        #torch.save(model, f"out/230302bis_polo_stn_dual_WHAT_{radius}_{model.do_what}.pt")
+        #with open(f"out/230302bis_polo_stn_dual_WHAT_{radius}_{model.do_what}.pkl", "wb") as f:
+        torch.save(model, f"out/230302ter_polo_stn_dual_WHAT_{radius}_{model.do_what}.pt")
+        with open(f"out/230302ter_polo_stn_dual_WHAT_{radius}_{model.do_what}.pkl", "wb") as f:
             train_data = {
                 "train_acc" : train_acc,
                 "train_loss" : train_loss,
