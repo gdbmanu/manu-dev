@@ -290,6 +290,52 @@ def kl_divergence(model, z):
     kl = model.LAMBDA * kl.sum()
     return kl
 
+class Polo_AttentionTransNet_Loader(nn.Module):
+    
+    def __init__(self, do_stn=True, do_what=False, deterministic=False, LAMBDA=.1):
+        super(Polo_AttentionTransNet, self).__init__()
+        
+        self.do_stn = do_stn
+        self.do_what = do_what
+        self.deterministic = deterministic
+        
+        self.LAMBDA = LAMBDA
+
+        ##  The what pathway
+        self.wloc0 = nn.Conv2d(n_color['ext'] * n_theta['ext'] * n_phase['ext'], 
+                              50, 3, padding=1)
+        self.wloc1a = nn.Conv2d(50, 100, 3, padding=1)
+        self.wloc1b = nn.Conv2d(n_color['out'] * n_theta['out'] * n_phase['out'], 
+                              100, 3, padding=1)
+        self.wloc2a = nn.Conv2d(100, 200, 3, padding=1)
+        self.wloc2b = nn.Conv2d(100, 200, 3, padding=1)
+        self.wloc2c = nn.Conv2d(n_color['in'] * n_theta['in'] * n_phase['in'], 
+                               200, 3, padding=1)
+        self.wloc3 = nn.Conv2d(200, 500, 3, padding=1)
+        self.wloc4 = nn.Conv2d(500, 1000, 3, padding=1)
+        self.wloc5_short = nn.Linear(1000 * (((n_levels['in']-1) * n_eccentricity['in'] * 3) // 8 * n_azimuth['in'] // 8), 2, bias=False)
+        self.wloc5 = nn.Linear(1000 * (((n_levels['in']-1) * n_eccentricity['in'] * 3) // 8 * n_azimuth['in'] // 8), 1000)
+        self.wloc6 = nn.Linear(1000, 2, bias=False)
+
+        #self.wloc4.weight.data.zero_()
+        #self.wloc4.bias.data.zero_()
+
+                
+        ##  The where pathway        
+        self.loc0 = nn.Conv2d(n_color['ext'] * n_theta['ext'] * n_phase['ext'], 
+                              50, 5, padding=2, stride=2)
+        self.loc1a = nn.Conv2d(50, 100, 5, padding=2, stride=2)
+        self.loc1b = nn.Conv2d(n_color['out'] * n_theta['out'] * n_phase['out'], 
+                              50, 5, padding=2, stride=2)
+        self.loc2a = nn.Conv2d(100, 200, 5, padding=2, stride=2)
+        self.loc2b = nn.Conv2d(50, 100, 5, padding=2,stride=2)
+        self.loc2c = nn.Conv2d(n_color['in'] * n_theta['in'] * n_phase['in'], 50, 5, padding=2,stride=2)
+        self.loc3 = nn.Linear((n_levels['in']-1) * n_eccentricity['in'] // 2 * n_azimuth['in'] // 2 * (50+100+200), 1000)
+        self.loc4 = nn.Linear(1000, 1000)
+        self.mu = nn.Linear(1000, 2, bias=False)
+        self.logvar = nn.Linear(1000, 2, bias=False)
+        
+
 # In[30]:
 class Polo_AttentionTransNet(nn.Module):
     
@@ -653,14 +699,29 @@ if __name__ == '__main__':
 
     device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
     #model = torch.load("../models/low_comp_polo_stn.pt")
-    model = Polo_AttentionTransNet(LAMBDA=LAMBDA, deterministic=deterministic).to(device)
-
+    what_model = Polo_AttentionTransNet_Loader(LAMBDA=LAMBDA, deterministic=deterministic).to(device)
+    what_model = torch.load(f"out/230320b_polo_stn_dual_WHAT_{radius}_{LAMBDA}.pt")
+    
+    selected_params = {'wloc0.weight', 'wloc0.bias',
+                       'wloc1a.weight', 'wloc1a.bias',
+                       'wloc1b.weight', 'wloc1b.bias',
+                       'wloc2a.weight', 'wloc2a.bias',
+                       'wloc2b.weight', 'wloc2b.bias',
+                       'wloc2c.weight', 'wloc2c.bias',
+                       'wloc3.weight', 'wloc3.bias',
+                       'wloc4.weight', 'wloc4.bias',
+                       'wloc5.weight', 'wloc5.bias',
+                       'wloc6.weight', 'wloc6.bias'}      
+         
+    what_params = {k: v for k, v in model.state_dict().items() if k in selected_params}
+    
+    model = Polo_AttentionTransNet(LAMBDA=LAMBDA).to(device)
+    model.load_state_dict(what_params, strict=False)    
 
     optimizer = optim.Adam(model.parameters(), lr=lr)
     #optimizer = optim.SGD(model.parameters(), lr=lr)
     loss_func = nn.CrossEntropyLoss()
     #scheduler = optim.lr_scheduler.StepLR(optimizer, step_size=10, gamma=0.9, last_epoch=-1) #, verbose=True)
-
 
     # In[35]:
 
@@ -676,11 +737,40 @@ if __name__ == '__main__':
     test_kl_loss = []
     test_entropy = []
 
-
-
     for epoch in range(args.epochs):
         n_sample_train = None
         n_sample_test = None
+        
+        params = []
+        if epoch % 2 == 1:
+            lr = 3e-6
+            model.deterministic=True            
+            params.extend(list(model.loc_ext_1.parameters()))
+            params.extend(list(model.loc_ext_2.parameters()))
+            params.extend(list(model.loc_ext_3.parameters()))
+            params.extend(list(model.loc_out_1.parameters()))
+            params.extend(list(model.loc_out_2.parameters()))
+            params.extend(list(model.loc_in_1.parameters()))
+            params.extend(list(model.loc_in_2.parameters()))
+            params.extend(list(model.loc_in_out.parameters()))
+            params.extend(list(model.loc_all.parameters()))
+            params.extend(list(model.fc_where.parameters()))
+            params.extend(list(model.mu.parameters()))
+            optimizer = optim.Adam(model.mu.parameters(), lr=lr)
+        else:
+            lr = 1e-4
+            model.deterministic=False
+            params.extend(list(model.wloc0.parameters()))
+            params.extend(list(model.wloc1a.parameters()))
+            params.extend(list(model.wloc1b.parameters()))
+            params.extend(list(model.wloc2a.parameters()))
+            params.extend(list(model.wloc2b.parameters()))
+            params.extend(list(model.wloc2c.parameters()))
+            params.extend(list(model.wloc3.parameters()))
+            params.extend(list(model.wloc4.parameters()))
+            params.extend(list(model.wloc5.parameters()))
+            params.extend(list(model.wloc6.parameters()))
+            optimizer = optim.Adam(model.fc_what.parameters(), lr=lr)
         
         training_step = 0
         acc, loss, kl_loss, entropy = train(epoch, dataloader['train'], n_sample_train, training_step = training_step)
@@ -694,8 +784,8 @@ if __name__ == '__main__':
         test_loss.append(loss)
         test_kl_loss.append(kl_loss)
         test_entropy.append(entropy)
-        torch.save(model, f"out/230320b_polo_stn_dual_WHAT_{radius}_{LAMBDA}.pt")
-        with open(f"out/230320b_polo_stn_dual_WHAT_{radius}_{LAMBDA}.pkl", "wb") as f:
+        torch.save(model, f"out/230320b_polo_stn_dual_{LAMBDA}.pt")
+        with open(f"out/230320b_polo_stn_dual_{LAMBDA}.pkl", "wb") as f:
             train_data = {
                 "train_acc" : train_acc,
                 "train_loss" : train_loss,
