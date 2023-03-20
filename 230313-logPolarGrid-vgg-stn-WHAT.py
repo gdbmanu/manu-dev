@@ -359,33 +359,15 @@ test_loss = []
 test_kl_loss = []
 test_entropy = []
     
-model = Grid_AttentionTransNet(do_stn=True, do_what = True, LAMBDA=LAMBDA, deterministic=True).to(device)
+model = Grid_AttentionTransNet(do_stn=False, do_what = True, LAMBDA=LAMBDA, deterministic=True).to(device)
 optimizer = optim.Adam(model.fc_what.parameters(), lr=lr)
 
 save_path = "out/"
-what_f_name = f"230313_ImgNet_logPolarGrid_vgg_stn_WHAT_{radius}_wide"
-f_name = f"230315_ImgNet_logPolarGrid_vgg_stn_{radius}_wide"
-
-selected_params = {'fc_what.weight', 'fc_what.bias'}
-loaded_params = torch.load(save_path + what_f_name + ".pt")
-params_to_update = {k: v for k, v in loaded_params.items() if k in selected_params}
-model.load_state_dict(params_to_update, strict=False)
-
-model.LAMBDA = LAMBDA
-
+f_name = f"230313_ImgNet_logPolarGrid_vgg_stn_WHAT_{radius}_wide"
 
 for epoch in range(args.epochs):
     
-    if epoch % 2 == 1:
-        lr = 3e-6
-        model.deterministic=True
-        optimizer = optim.Adam(model.mu.parameters(), lr=lr)
-    else:
-        lr = 1e-4
-        model.deterministic=False
-        optimizer = optim.Adam(model.fc_what.parameters(), lr=lr)
-    
-    args.radius = radius
+    args.radius = std_axe[epoch]
     print(f'****** EPOCH : {epoch}/{args.epochs}, radius = {args.radius} ******')
     acc, loss, kl_loss, entropy = train(epoch, dataloader['train'])
     train_acc.append(acc)
@@ -397,7 +379,7 @@ for epoch in range(args.epochs):
     test_loss.append(loss)
     test_kl_loss.append(kl_loss)
     test_entropy.append(entropy)
-    selected_params = {'fc_what.weight', 'fc_what.bias', 'mu.weight', 'mu.bias'}
+    selected_params = {'fc_what.weight', 'fc_what.bias'}
     params_to_save = {k: v for k, v in model.state_dict().items() if k in selected_params}
     torch.save(params_to_save, save_path + f_name + ".pt")
     with open(save_path + f_name + ".pkl", "wb") as f:
