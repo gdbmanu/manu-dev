@@ -190,9 +190,9 @@ polo_transform =  transforms.Compose([
 
 
 #image_path = "/envau/work/brainets/dauce.e/data/animal/"
-#image_path = "/media/manu/Seagate Expansion Drive/Data/animal/"
+image_path = "/media/manu/Seagate Expansion Drive/Data/animal/"
 #image_path = "/run/user/1001/gvfs/sftp:host=bag-008-de03/envau/work/brainets/dauce.e/data/animal/"
-image_path = "../data/animal/"
+#image_path = "../data/animal/"
 
 image_dataset = { 'train' : datasets.ImageFolder(
                             image_path+'train', 
@@ -314,6 +314,7 @@ class Polo_AttentionTransNet(nn.Module):
                                200, 3, padding=1)
         self.wloc3 = nn.Conv2d(200, 500, 3, padding=1)
         self.wloc4 = nn.Conv2d(500, 1000, 3, padding=1)
+        self.wloc5_short = nn.Linear(1000 * (((n_levels['in']-1) * n_eccentricity['in'] * 3) // 8 * n_azimuth['in'] // 8), 2, bias=False)
         self.wloc5 = nn.Linear(1000 * (((n_levels['in']-1) * n_eccentricity['in'] * 3) // 8 * n_azimuth['in'] // 8), 1000)
         self.wloc6 = nn.Linear(1000, 2, bias=False)
 
@@ -322,21 +323,30 @@ class Polo_AttentionTransNet(nn.Module):
 
                 
         ##  The where pathway        
-        self.loc0 = nn.Conv2d(n_color['ext'] * n_theta['ext'] * n_phase['ext'], 
-                              50, 5, padding=2, stride=2)
-        self.loc1a = nn.Conv2d(50, 100, 5, padding=2, stride=2)
-        self.loc1b = nn.Conv2d(n_color['out'] * n_theta['out'] * n_phase['out'], 
-                              50, 5, padding=2, stride=2)
-        self.loc2a = nn.Conv2d(100, 200, 5, padding=2, stride=2)
-        self.loc2b = nn.Conv2d(50, 100, 5, padding=2,stride=2)
-        self.loc2c = nn.Conv2d(n_color['in'] * n_theta['in'] * n_phase['in'], 50, 5, padding=2,stride=2)
-        self.loc3 = nn.Linear((n_levels['in']-1) * n_eccentricity['in'] // 2 * n_azimuth['in'] // 2 * (50+100+200), 1000)
-        self.loc4 = nn.Linear(1000, 1000)
-        self.mu = nn.Linear(1000, 2, bias=False)
-        self.logvar = nn.Linear(1000, 2, bias=False)
-        
-        
+        self.loc_ext_1 = nn.Conv2d(n_color['ext'] * n_theta['ext'] * n_phase['ext'], 
+                              128, 3, padding=1, stride=1)
+        self.loc_ext_2 = nn.Conv2d(32, 128, 5, padding=2, stride=1)
+        self.loc_ext_3 = nn.Conv2d(32, 128, 7, padding=3, stride=1)
 
+        self.loc_out_1 = nn.Conv2d(n_color['out'] * n_theta['out'] * n_phase['out'], 
+                              128, 3, padding=1, stride=1)
+        self.loc_out_2 = nn.Conv2d(32, 128, 5, padding=2,stride=1)
+
+        self.loc_in_1 = nn.Conv2d(n_color['in'] * n_theta['in'] * n_phase['in'], 
+                              128, 3, padding=1, stride=1)
+        self.loc_in_2 = nn.Conv2d(32, 128, 5, padding=2,stride=1)
+
+        self.upsample_in = nn.ConvTranspose2d(32, 32, 3, padding=1, stride=2)       
+        self.loc_in_out = nn.Conv2d(32, 128, 7, padding=3,stride=1)
+
+        self.upsample_out = nn.ConvTranspose2d(32, 32, 3, padding=1, stride=2)   
+        self.loc_all = nn.Conv2d(32, 128, 9, padding=4,stride=1)
+
+        final_dim = 3 * (n_levels['ext']-1) * n_eccentricity['ext'] * n_azimuth['ext']
+        self.fc_where = nn.Linear(final_dim * 32, final_dim)
+        self.mu = nn.Linear(final_dim, 2, bias=False)
+        self.logvar = nn.Linear(final_dim, 2, bias=False)
+        
         #self.loc4.weight.data.zero_()
         #self.loc4.bias.data.zero_()
 
@@ -359,27 +369,84 @@ class Polo_AttentionTransNet(nn.Module):
 
             if True: #with torch.no_grad():
 
-                xs = F.relu(self.loc0(x_polo['ext']))
+                c_in = 128
+                c_out = 32
 
-                xsa = F.relu(self.loc1a(xs))
-                xsb = F.relu(self.loc1b(x_polo['out']))
+                # in
+                w_in = (n_levels['in']-1) * n_eccentricity['in']
+                h_in = n_azimuth['in']
 
-                xsa = F.relu(self.loc2a(xsa))
-                xsb = F.relu(self.loc2b(xsb))
-                xsc = F.relu(self.loc2c(x_polo['in']))
-                
-                xs = torch.cat((xsa, xsb, xsc), dim=1)
-            xs = F.relu(self.loc3(xs.view(-1, (50+100+200) * (n_levels['in']-1) * n_eccentricity['in'] // 2 * n_azimuth['in'] // 2)))
-            #theta = F.sigmoid(self.loc4(xs)) - 0.5
-            #theta = self.loc4(xs)
-            xs = F.relu(self.loc4(xs))
-            mu = self.mu(xs)
+                x_in = F.relu(self.loc_in_1(x_polo['in']))
+                x_in = x_in.view(-1, c_in, w_in * h_in).permute(0, 2, 1)
+                x_in = nn.MaxPool1d(4)(x_in)
+                x_in = x_in.permute(0,2,1).view(-1, c_out, w_in, h_in)
+
+                x_in = F.relu(self.loc_in_2(x_in))
+                x_in = x_in.view(-1, c_in, w_in * h_in).permute(0, 2, 1)
+                x_in = nn.MaxPool1d(4)(x_in)
+                x_in = x_in.permute(0,2,1).view(-1, c_out, w_in, h_in)
+
+                x_in = nn.Upsample(scale_factor=2, mode='nearest')(x_in)
+
+                # out
+                w_out = (n_levels['out']-1) * n_eccentricity['out']
+                h_out = n_azimuth['out']
+
+                x_out = F.relu(self.loc_out_1(x_polo['out']))
+                x_out = x_out.view(-1, c_in, w_out * h_out).permute(0, 2, 1)
+                x_out = nn.MaxPool1d(4)(x_out)
+                x_out = x_out.permute(0,2,1).view(-1, c_out, w_out, h_out)
+
+                x_out = F.relu(self.loc_out_2(x_out))
+                x_out = x_out.view(-1, c_in, w_out * h_out).permute(0, 2, 1)
+                x_out = nn.MaxPool1d(4)(x_out)
+                x_out = x_out.permute(0,2,1).view(-1, c_out, w_out, h_out)
+
+                x_in_out = torch.cat((x_in, x_out), dim=2)
+
+                x_in_out = F.relu(self.loc_in_out(x_in_out))
+                x_in_out = x_in_out.view(-1, c_in, 2 * w_out * h_out).permute(0, 2, 1)
+                x_in_out = nn.MaxPool1d(4)(x_in_out)
+                x_in_out = x_in_out.permute(0,2,1).view(-1, c_out, 2 * w_out, h_out)
+
+                x_in_out = nn.Upsample(scale_factor=2, mode='nearest')(x_in_out)
+
+                # ext
+                w_ext = (n_levels['ext']-1) * n_eccentricity['ext']
+                h_ext = n_azimuth['ext']
+
+                x_ext = F.relu(self.loc_ext_1(x_polo['ext']))
+                x_ext = x_ext.view(-1, c_in, w_ext * h_ext).permute(0, 2, 1)
+                x_ext = nn.MaxPool1d(4)(x_ext)
+                x_ext = x_ext.permute(0,2,1).view(-1, c_out, w_ext, h_ext)
+
+                x_ext = F.relu(self.loc_ext_2(x_ext))
+                x_ext = x_ext.view(-1, c_in, w_ext * h_ext).permute(0, 2, 1)
+                x_ext = nn.MaxPool1d(4)(x_ext)
+                x_ext = x_ext.permute(0,2,1).view(-1, c_out, w_ext, h_ext)
+
+                x_ext = F.relu(self.loc_ext_3(x_ext))
+                x_ext = x_ext.view(-1, c_in, w_ext * h_ext).permute(0, 2, 1)
+                x_ext = nn.MaxPool1d(4)(x_ext)
+                x_ext = x_ext.permute(0,2,1).view(-1, c_out, w_ext, h_ext)
+
+                x_all = torch.cat((x_in_out, x_ext), dim=2)
+
+                x_all = F.relu(self.loc_all(x_all))
+                x_all = x_all.view(-1, c_in, 3 * w_ext * h_ext).permute(0, 2, 1)
+                x_all = nn.MaxPool1d(4)(x_all)
+                x_all = x_all.permute(0,2,1).view(-1, c_out * 3 * w_ext * h_ext)
+
+                x_all = F.relu(self.fc_where(x_all))
+              
+            
+            mu = self.mu(x_all)
             if self.deterministic:
                 sigma = args.radius * torch.ones_like(mu)  
                 self.q = torch.distributions.Normal(mu, sigma)  
                 z = mu
             else:
-                logvar = self.logvar(xs) + 5
+                logvar = self.logvar(x_all) + 5
                 sigma = torch.exp(-logvar / 2)
                 self.q = torch.distributions.Normal(mu, sigma)      
                 z = self.q.rsample()
@@ -422,7 +489,7 @@ class Polo_AttentionTransNet(nn.Module):
               
         return x, theta, z
 
-    def forward(self, x, x_polo):
+    def forward(self, x, x_polo, training_step = None):
         # transform the input
         x, theta, z = self.stn(x, x_polo)
         
@@ -467,12 +534,16 @@ class Polo_AttentionTransNet(nn.Module):
 
         #print(y.shape)
         #print(1000 * (((n_levels['in']-1) * n_eccentricity['in'] * 3) // 8 * n_azimuth['in'] // 8))
-        y = F.relu(self.wloc5(y.view(-1, 1000 * (((n_levels['in']-1) * n_eccentricity['in'] * 3) // 8 * n_azimuth['in'] // 8))))
-        y = self.wloc6(y)
+        if training_step == 0:
+            y = y.view(-1, 1000 * (((n_levels['in']-1) * n_eccentricity['in'] * 3) // 8 * n_azimuth['in'] // 8))
+            y = self.wloc5_short(y)
+        else:
+            y = F.relu(self.wloc5(y.view(-1, 1000 * (((n_levels['in']-1) * n_eccentricity['in'] * 3) // 8 * n_azimuth['in'] // 8))))
+            y = self.wloc6(y)
 
         return y, theta, z
 
-def train(epoch, loader, n_sample_train):
+def train(epoch, loader, n_sample_train, training_step):
     model.train()
     train_loss = 0
     kl_loss = 0
@@ -491,7 +562,7 @@ def train(epoch, loader, n_sample_train):
         target = target.to(device)
         
         optimizer.zero_grad()
-        output, theta, z = model(data_original, data_polo)
+        output, theta, z = model(data_original, data_polo, training_step)
         if model.do_stn and model.deterministic:
             loss = loss_func(output, target) + kl_divergence(model, z) #+ negentropy_loss(model, z)
         else:
@@ -524,7 +595,7 @@ def train(epoch, loader, n_sample_train):
     correct /= n_sample_train * args.batch_size
     return correct, train_loss, kl_loss, entropy
 
-def test(loader, n_sample_test):
+def test(loader, n_sample_test, training_step):
     with torch.no_grad():
         model.eval()
         test_loss = 0
@@ -542,7 +613,7 @@ def test(loader, n_sample_test):
             data_polo['ext'] = data_polo['ext'].to(device, dtype=torch.double)
             target = target.to(device)
 
-            output, theta, z = model(data_original, data_polo)
+            output, theta, z = model(data_original, data_polo, training_step)
 
             # sum up batch loss
             #test_loss += F.nll_loss(output, target, size_average=False).item()
@@ -573,8 +644,9 @@ def test(loader, n_sample_test):
 
 lr = 1e-4
 LAMBDA = 1e-4
-deterministic = False
-do_stn = False
+deterministic = True
+do_stn = True
+radius = 0.5
 
 if __name__ == '__main__':
 
@@ -593,7 +665,7 @@ if __name__ == '__main__':
     # In[35]:
 
     args.epochs = 150
-    args.radius = 0.5
+    args.radius = radius
 
     train_acc = []
     train_loss = []
@@ -607,42 +679,23 @@ if __name__ == '__main__':
 
 
     for epoch in range(args.epochs):
-        
-        model.do_stn = False
-        model.do_what = True
-        n_sample_test = None
-
-        #args.radius = radius #(epoch // 2) / 75 * 0.3 
-
-        params = []
         n_sample_train = None
+        n_sample_test = None
         
-        params.extend(list(model.wloc0.parameters()))
-        params.extend(list(model.wloc1b.parameters()))
-        params.extend(list(model.wloc2c.parameters()))
-        params.extend(list(model.wloc1a.parameters()))
-        params.extend(list(model.wloc2b.parameters()))
-        params.extend(list(model.wloc2a.parameters()))
-        params.extend(list(model.wloc3.parameters()))
-        params.extend(list(model.wloc4.parameters()))
-        params.extend(list(model.wloc5.parameters()))
-        params.extend(list(model.wloc6.parameters()))
-
-        optimizer = optim.Adam(params, lr=lr)
-
-        acc, loss, kl_loss, entropy = train(epoch, dataloader['train'], n_sample_train)
+        training_step = 0
+        acc, loss, kl_loss, entropy = train(epoch, dataloader['train'], n_sample_train, training_step = training_step)
         train_acc.append(acc)
         train_loss.append(loss)
         train_kl_loss.append(kl_loss)
         train_entropy.append(entropy)
 
-        acc, loss, kl_loss, entropy = test(dataloader['test'], n_sample_test)
+        acc, loss, kl_loss, entropy = test(dataloader['test'], n_sample_test, training_step = training_step)
         test_acc.append(acc)
         test_loss.append(loss)
         test_kl_loss.append(kl_loss)
         test_entropy.append(entropy)
-        torch.save(model, f"out/230302_polo_stn_dual_WHAT_{args.radius}_{model.do_what}.pt")
-        with open(f"out/230302_polo_stn_dual_WHAT_{args.radius}_{model.do_what}.pkl", "wb") as f:
+        torch.save(model, f"out/230320_polo_stn_dual_WHAT_{radius}_{LAMBDA}.pt")
+        with open(f"out/230320_polo_stn_dual_WHAT_{radius}_{LAMBDA}.pkl", "wb") as f:
             train_data = {
                 "train_acc" : train_acc,
                 "train_loss" : train_loss,

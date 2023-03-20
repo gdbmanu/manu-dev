@@ -190,9 +190,9 @@ polo_transform =  transforms.Compose([
 
 
 #image_path = "/envau/work/brainets/dauce.e/data/animal/"
-image_path = "/media/manu/Seagate Expansion Drive/Data/animal/"
+#image_path = "/media/manu/Seagate Expansion Drive/Data/animal/"
 #image_path = "/run/user/1001/gvfs/sftp:host=bag-008-de03/envau/work/brainets/dauce.e/data/animal/"
-#image_path = "../data/animal/"
+image_path = "../data/animal/"
 
 image_dataset = { 'train' : datasets.ImageFolder(
                             image_path+'train', 
@@ -623,7 +623,8 @@ if __name__ == '__main__':
         params = []
         n_sample_train = None
         
-        if True: #epoch % 2 == 0:
+        training_step = epoch % 2
+        if training_step == 0:
             params.extend(list(model.wloc0.parameters()))
             params.extend(list(model.wloc1b.parameters()))
             params.extend(list(model.wloc2c.parameters()))
@@ -633,13 +634,12 @@ if __name__ == '__main__':
             params.extend(list(model.wloc3.parameters()))
             params.extend(list(model.wloc4.parameters()))
             params.extend(list(model.wloc5_short.parameters()))
-        elif epoch % 2 == 1:
+        elif training_step == 1:
             params.extend(list(model.wloc5.parameters()))
             params.extend(list(model.wloc6.parameters()))
 
         optimizer = optim.Adam(params, lr=lr)
 
-        training_step = 0
         acc, loss, kl_loss, entropy = train(epoch, dataloader['train'], n_sample_train, training_step = training_step)
         train_acc.append(acc)
         train_loss.append(loss)
@@ -651,6 +651,8 @@ if __name__ == '__main__':
         test_loss.append(loss)
         test_kl_loss.append(kl_loss)
         test_entropy.append(entropy)
+        #torch.save(model, f"out/230302bis_polo_stn_dual_WHAT_{radius}_{model.do_what}.pt")
+        #with open(f"out/230302bis_polo_stn_dual_WHAT_{radius}_{model.do_what}.pkl", "wb") as f:
         torch.save(model, f"out/230302ter_polo_stn_dual_WHAT_{radius}_{model.do_what}.pt")
         with open(f"out/230302ter_polo_stn_dual_WHAT_{radius}_{model.do_what}.pkl", "wb") as f:
             train_data = {
