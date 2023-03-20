@@ -189,10 +189,10 @@ polo_transform =  transforms.Compose([
 # In[17]:
 
 
-image_path = "/envau/work/brainets/dauce.e/data/animal/"
+#image_path = "/envau/work/brainets/dauce.e/data/animal/"
 #image_path = "/media/manu/Seagate Expansion Drive/Data/animal/"
 #image_path = "/run/user/1001/gvfs/sftp:host=bag-008-de03/envau/work/brainets/dauce.e/data/animal/"
-#image_path = "../data/animal/"
+image_path = "../data/animal/"
 
 image_dataset = { 'train' : datasets.ImageFolder(
                             image_path+'train', 
@@ -252,12 +252,13 @@ transform_in =  transforms.Compose([
 
 
 def negentropy_loss(model, z):
-    z_mean = torch.mean(z, dim=0)
+    z_mean = torch.mean(z, dim=0) + 1e-6
     z_std = torch.std(z, dim=0)
-    if False: #torch.mean(z_std).item() > 1e-6:
+    if model.do_stn or args.radius > 0:
         p = torch.distributions.Normal(torch.ones_like(z)*z_mean, torch.ones_like(z) * z_std)
     else:
-        p = torch.distributions.Normal(torch.zeros_like(z), torch.ones_like(z))
+        p = torch.distributions.Normal(torch.zeros_like(z), 1e-6 * torch.ones_like(z))
+
     #p = torch.distributions.Normal(torch.ones_like(z)*z_mean, torch.ones_like(z) * z_std)
     return p.log_prob(z).sum()
 
@@ -266,22 +267,20 @@ def kl_divergence(model, z):
     # Monte carlo KL divergence
     # --------------------------
     # 1. define the first two probabilities (in this case Normal for both)
-    try:
+    if args.radius > 0:
         p = torch.distributions.Normal(torch.zeros_like(z), args.radius * torch.ones_like(z))
-    except:
-        p = torch.distributions.Normal(torch.zeros_like(z), torch.ones_like(z))
+    else:
+        p = torch.distributions.Normal(torch.zeros_like(z), 1e-6 * torch.ones_like(z))
+
 
     # 2. get the probabilities from the equation
     #log_qzx = model.q.log_prob(z)
     log_pz = p.log_prob(z)
 
     z_mean = torch.mean(z, dim=0)
-    z_std = torch.std(z, dim=0)
-    print(z_std)
-    if False: #torch.mean(z_std).item() > 1e-6:
-        q = torch.distributions.Normal(torch.ones_like(z)*z_mean, torch.ones_like(z) * z_std)
-    else:
-        q = torch.distributions.Normal(torch.zeros_like(z), torch.ones_like(z))
+    z_std = torch.std(z, dim=0) + 1e-6
+    #print(z_std)
+    q = torch.distributions.Normal(torch.ones_like(z)*z_mean, torch.ones_like(z) * z_std)
     log_qzx = q.log_prob(z)
 
     # kl
@@ -316,7 +315,7 @@ class Polo_AttentionTransNet(nn.Module):
         self.wloc3 = nn.Conv2d(200, 500, 3, padding=1)
         self.wloc4 = nn.Conv2d(500, 1000, 3, padding=1)
         self.wloc5 = nn.Linear(1000 * (((n_levels['in']-1) * n_eccentricity['in'] * 3) // 8 * n_azimuth['in'] // 8), 1000)
-        self.wloc6 = nn.Linear(1000, 2)
+        self.wloc6 = nn.Linear(1000, 2, bias=False)
 
         #self.wloc4.weight.data.zero_()
         #self.wloc4.bias.data.zero_()
@@ -400,7 +399,7 @@ class Polo_AttentionTransNet(nn.Module):
             sigma = torch.tensor([1, 1],dtype=torch.double)
             sigma = sigma.unsqueeze(0).repeat(x.size()[0], 1)    
             
-            if self.do_what:
+            if self.do_what and args.radius > 0:
                 self.q = torch.distributions.Normal(mu, args.radius*sigma)
                 z = self.q.rsample().to(device)
                 print(z[0,...])
@@ -413,7 +412,7 @@ class Polo_AttentionTransNet(nn.Module):
                 x = F.grid_sample(x, grid)
             else:
                 z = torch.tensor([0, 0],dtype=torch.float)
-                z = z.unsqueeze(0).repeat(x.size()[0], 1)
+                z = z.unsqueeze(0).repeat(x.size()[0], 1).to(device)
 
                 theta = nn.Parameter(torch.tensor([[1, 0, 0], [0, 1, 0]],
                                                     dtype=torch.float),
@@ -427,7 +426,7 @@ class Polo_AttentionTransNet(nn.Module):
         # transform the input
         x, theta, z = self.stn(x, x_polo)
         
-        if self.do_stn:
+        if self.do_stn or (self.do_what and args.radius > 0):
         
             w_x_polo ={'in': torch.zeros_like(x_polo['in']),
                        'out': torch.zeros_like(x_polo['out']),
@@ -459,7 +458,6 @@ class Polo_AttentionTransNet(nn.Module):
         
         yc = F.relu(self.wloc2c(w_x_polo['in']))
         yc = nn.MaxPool2d(2)(yc)
-        
 
         y = torch.cat((ya, yb, yc), dim=2)
         y = F.relu(self.wloc3(y))
@@ -469,9 +467,9 @@ class Polo_AttentionTransNet(nn.Module):
 
         #print(y.shape)
         #print(1000 * (((n_levels['in']-1) * n_eccentricity['in'] * 3) // 8 * n_azimuth['in'] // 8))
-
         y = F.relu(self.wloc5(y.view(-1, 1000 * (((n_levels['in']-1) * n_eccentricity['in'] * 3) // 8 * n_azimuth['in'] // 8))))
         y = self.wloc6(y)
+
         return y, theta, z
 
 def train(epoch, loader, n_sample_train):
@@ -494,7 +492,6 @@ def train(epoch, loader, n_sample_train):
         
         optimizer.zero_grad()
         output, theta, z = model(data_original, data_polo)
-        print(f'model.deteministic:{model.deterministic}')
         if model.do_stn and model.deterministic:
             loss = loss_func(output, target) + kl_divergence(model, z) #+ negentropy_loss(model, z)
         else:
@@ -576,7 +573,7 @@ def test(loader, n_sample_test):
 
 lr = 1e-4
 LAMBDA = 1e-4
-deterministic = True
+deterministic = False
 do_stn = False
 
 if __name__ == '__main__':
@@ -598,8 +595,6 @@ if __name__ == '__main__':
     args.epochs = 150
     args.radius = 0.5
 
-    model.do_stn = True
-    
     train_acc = []
     train_loss = []
     train_kl_loss = []
@@ -609,25 +604,31 @@ if __name__ == '__main__':
     test_kl_loss = []
     test_entropy = []
 
-    params = []
-    n_sample_train = None
-    params.extend(list(model.wloc0.parameters()))
-    params.extend(list(model.wloc1a.parameters()))
-    params.extend(list(model.wloc1b.parameters()))
-    params.extend(list(model.wloc2a.parameters()))
-    params.extend(list(model.wloc2b.parameters()))
-    params.extend(list(model.wloc2c.parameters()))
-    params.extend(list(model.wloc3.parameters()))
-    params.extend(list(model.wloc4.parameters()))
-    params.extend(list(model.wloc5.parameters()))
-    params.extend(list(model.wloc6.parameters()))
 
-    optimizer = optim.Adam(params, lr=lr)
+
     for epoch in range(args.epochs):
         
         model.do_stn = False
-        model.do_what = False
+        model.do_what = True
         n_sample_test = None
+
+        #args.radius = radius #(epoch // 2) / 75 * 0.3 
+
+        params = []
+        n_sample_train = None
+        
+        params.extend(list(model.wloc0.parameters()))
+        params.extend(list(model.wloc1b.parameters()))
+        params.extend(list(model.wloc2c.parameters()))
+        params.extend(list(model.wloc1a.parameters()))
+        params.extend(list(model.wloc2b.parameters()))
+        params.extend(list(model.wloc2a.parameters()))
+        params.extend(list(model.wloc3.parameters()))
+        params.extend(list(model.wloc4.parameters()))
+        params.extend(list(model.wloc5.parameters()))
+        params.extend(list(model.wloc6.parameters()))
+
+        optimizer = optim.Adam(params, lr=lr)
 
         acc, loss, kl_loss, entropy = train(epoch, dataloader['train'], n_sample_train)
         train_acc.append(acc)
