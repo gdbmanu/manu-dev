@@ -700,7 +700,7 @@ if __name__ == '__main__':
 
     # In[35]:
 
-    args.epochs = 150
+    args.epochs = 1500
     args.radius = radius
 
     train_acc = []
@@ -713,8 +713,8 @@ if __name__ == '__main__':
     test_entropy = []
 
     for epoch in range(args.epochs):
-        n_sample_train = 40
-        n_sample_test = 10
+        n_sample_train = 1
+        n_sample_test = 1
         
         params = []
         if epoch % 2 == 1:
@@ -758,8 +758,8 @@ if __name__ == '__main__':
         test_loss.append(loss)
         test_kl_loss.append(kl_loss)
         test_entropy.append(entropy)
-        torch.save(model, f"out/230320b_polo_stn_dual_{LAMBDA}_sample.pt")
-        with open(f"out/230320b_polo_stn_dual_{LAMBDA}_sample.pkl", "wb") as f:
+        torch.save(model, f"out/230320b_polo_stn_dual_{LAMBDA}_sample_s.pt")
+        with open(f"out/230320b_polo_stn_dual_{LAMBDA}_sample_s.pkl", "wb") as f:
             train_data = {
                 "train_acc" : train_acc,
                 "train_loss" : train_loss,
