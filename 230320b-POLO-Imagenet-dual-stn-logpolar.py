@@ -190,9 +190,9 @@ polo_transform =  transforms.Compose([
 
 
 #image_path = "/envau/work/brainets/dauce.e/data/animal/"
-#image_path = "/media/manu/Seagate Expansion Drive/Data/animal/"
+image_path = "/media/manu/Seagate Expansion Drive/Data/animal/"
 #image_path = "/run/user/1001/gvfs/sftp:host=bag-008-de03/envau/work/brainets/dauce.e/data/animal/"
-image_path = "../data/animal/"
+#image_path = "../data/animal/"
 
 image_dataset = { 'train' : datasets.ImageFolder(
                             image_path+'train', 
@@ -664,7 +664,7 @@ def test(loader, n_sample_test):
 
 
 lr = 1e-4
-LAMBDA = 1e-4
+LAMBDA = 0
 deterministic = True
 do_stn = True
 radius = 0.5
@@ -675,7 +675,8 @@ if __name__ == '__main__':
     device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
     #model = torch.load("../models/low_comp_polo_stn.pt")
     what_model = Polo_AttentionTransNet(LAMBDA=LAMBDA, deterministic=deterministic).to(device)
-    what_model = torch.load(f"out/230302bis_polo_stn_dual_WHAT_0.5_True.pt")
+    what_model = torch.load(f"out/230302bis_polo_stn_dual_WHAT_0.5_True.pt",
+                            map_location=torch.device('cpu'))
     
     selected_params = {'wloc0.weight', 'wloc0.bias',
                        'wloc1a.weight', 'wloc1a.bias',
@@ -700,7 +701,7 @@ if __name__ == '__main__':
 
     # In[35]:
 
-    args.epochs = 150
+    args.epochs = 300
     args.radius = radius
 
     train_acc = []
@@ -713,8 +714,8 @@ if __name__ == '__main__':
     test_entropy = []
 
     for epoch in range(args.epochs):
-        n_sample_train = 40
-        n_sample_test = 10
+        n_sample_train = 1
+        n_sample_test = 1
         
         params = []
         if epoch % 2 == 1:
