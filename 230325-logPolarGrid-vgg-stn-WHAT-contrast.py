@@ -281,7 +281,10 @@ def train(epoch, loader):
         if model.do_stn and model.deterministic:
             loss = loss_func(output, target) + kl_divergence(model, z) 
         else:
-            loss = loss_func_contrast(output, output_ref)
+            if epoch % 2 == 0:
+                loss = loss_func_contrast(output, output_ref)
+            else:
+                loss = loss_func(output, target)
         loss.backward()
         optimizer.step()
         pred = output.argmax(dim=1, keepdim=True)
@@ -318,7 +321,7 @@ def test(loader):
         for n, (data, target) in enumerate(loader):
             data, target = data.to(device, dtype=torch.float), target.to(device)
 
-            output, theta, z = model(data)
+            output, output_ref, theta, z  = model(data)
 
             # sum up batch loss
             #test_loss += F.nll_loss(output, target, size_average=False).item()
