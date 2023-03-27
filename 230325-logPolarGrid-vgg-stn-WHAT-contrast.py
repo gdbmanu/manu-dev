@@ -141,26 +141,26 @@ class Grid_AttentionTransNet(nn.Module):
         
         ##  The what pathway
         
-        self.num_features = self.vgg.classifier[-1].in_features
-        features = list(self.vgg.classifier.children())[:-1] # Remove last layer
+        #self.num_features = self.vgg.classifier[-1].in_features
+        #features = list(self.vgg.classifier.children())[:-1] # Remove last layer
         #features.extend([nn.Linear(num_features, 500)]) # Add our layer
-        self.vgg.classifier = nn.Sequential(*features) # Replace the model classifier
+        #self.vgg.classifier = nn.Sequential(*features) # Replace the model classifier
         
-        self.what_grid = self.logPolarGrid(-4,0) 
+        self.what_grid = self.logPolarGrid(-1,-4) 
         
-        n_features = torch.tensor(self.num_features, dtype=torch.float)
         
-        self.fc_what = nn.Linear(self.num_features, 1000)
-        self.fc_what.weight.data /= torch.sqrt(n_features)
-        self.fc_what.bias.data /= torch.sqrt(n_features)
+        #self.fc_what = nn.Linear(self.num_features, 1000)
+        #self.fc_what.weight.data /= torch.sqrt(n_features)
+        #self.fc_what.bias.data /= torch.sqrt(n_features)
 
         ##  The where pathway        
         self.num_features = self.vgg_where.classifier[-1].in_features
+        n_features = torch.tensor(self.num_features, dtype=torch.float)
         features = list(self.vgg_where.classifier.children())[:-1] # Remove last layer
         #features.extend([nn.Linear(num_features, 500)]) # Add our layer
-        self.vgg_where.classifier = nn.Sequential(*features) # Replace the model classifier
+        #self.vgg_where.classifier = nn.Sequential(*features) # Replace the model classifier
         
-        self.where_grid = self.logPolarGrid(-3,0)
+        self.where_grid = self.logPolarGrid(0,-3)
         
         self.mu = nn.Linear(self.num_features, 2) #, bias=False)
         self.logvar = nn.Linear(self.num_features, 2) #, bias=False)
@@ -257,9 +257,11 @@ class Grid_AttentionTransNet(nn.Module):
         logPolx = F.grid_sample(x, self.what_grid)
         if True: #with torch.no_grad():
             y = self.vgg(logPolx)  
-        y = self.fc_what(y)
+        #y = self.fc_what(y)
+        with torch.no_grad():
+            y_ref = self.vgg_where(x) 
        
-        return y, theta, z
+        return y, y_ref, theta, z
 
 
 # In[28]:
@@ -275,11 +277,11 @@ def train(epoch, loader):
         data, target = data.to(device, dtype=torch.float), target.to(device)
    
         optimizer.zero_grad()
-        output, theta, z  = model(data)
+        output, output_ref, theta, z  = model(data)
         if model.do_stn and model.deterministic:
             loss = loss_func(output, target) + kl_divergence(model, z) 
         else:
-            loss = loss_func(output, target)
+            loss = loss_func_contrast(output, output_ref)
         loss.backward()
         optimizer.step()
         pred = output.argmax(dim=1, keepdim=True)
@@ -346,48 +348,29 @@ radius = .5
 device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
 
 loss_func = nn.CrossEntropyLoss()
+loss_func_contrast = nn.MSELoss()
 #scheduler = optim.lr_scheduler.StepLR(optimizer, step_size=10, gamma=0.9, last_epoch=-1) #, verbose=True)
 
 std_axe = np.linspace(radius * 1/args.epochs, radius, args.epochs)
 
+train_acc = []
+train_loss = []
+train_kl_loss = []
+train_entropy = []
+test_acc = []
+test_loss = []
+test_kl_loss = []
+test_entropy = []
     
-model = Grid_AttentionTransNet(do_stn=True, do_what = True, LAMBDA=LAMBDA, deterministic=True).to(device)
+model = Grid_AttentionTransNet(do_stn=False, do_what = True, LAMBDA=LAMBDA, deterministic=True).to(device)
+optimizer = optim.Adam(model.vgg.classifier.parameters(), lr=lr)
 
 save_path = "out/"
-orig_f_name = f"230315_ImgNet_logPolarGrid_vgg_stn_{radius}_wide"
-f_name = f"230315b_ImgNet_logPolarGrid_vgg_stn_{radius}_wide"
-
-selected_params = {'fc_what.weight', 'fc_what.bias', 'mu.weight', 'mu.bias'}
-loaded_params = torch.load(save_path + orig_f_name + ".pt")
-params_to_update = {k: v for k, v in loaded_params.items() if k in selected_params}
-model.load_state_dict(params_to_update, strict=False)
-
-model.LAMBDA = LAMBDA
-
-with open(save_path + orig_f_name + ".pkl", "rb") as f:
-    data = pickle.load(f)
-    train_acc = data["train_acc"]
-    train_loss = data["train_loss"]
-    train_kl_loss = data["train_kl_loss"]
-    train_entropy = data["train_entropy"]
-    test_acc = data["test_acc"]
-    test_loss = data["test_loss"]
-    test_kl_loss = data["test_kl_loss"]
-    test_entropy = data["test_entropy"]
-
+f_name = f"230325_ImgNet_logPolarGrid_vgg_stn_WHAT_{radius}_contrast"
 
 for epoch in range(args.epochs):
     
-    if epoch % 2 == 1:
-        lr = 3e-6
-        model.deterministic=True
-        optimizer = optim.Adam(model.mu.parameters(), lr=lr)
-    else:
-        lr = 1e-4
-        model.deterministic=False
-        optimizer = optim.Adam(model.fc_what.parameters(), lr=lr)
-    
-    args.radius = radius
+    args.radius = std_axe[epoch]
     print(f'****** EPOCH : {epoch}/{args.epochs}, radius = {args.radius} ******')
     acc, loss, kl_loss, entropy = train(epoch, dataloader['train'])
     train_acc.append(acc)
@@ -399,7 +382,9 @@ for epoch in range(args.epochs):
     test_loss.append(loss)
     test_kl_loss.append(kl_loss)
     test_entropy.append(entropy)
-    selected_params = {'fc_what.weight', 'fc_what.bias', 'mu.weight', 'mu.bias'}
+    selected_params = {'vgg.classifier.0.weight', 'vgg.classifier.0.bias',
+                        'vgg.classifier.3.weight', 'vgg.classifier.3.bias',
+                        'vgg.classifier.6.weight', 'vgg.classifier.6.bias'}
     params_to_save = {k: v for k, v in model.state_dict().items() if k in selected_params}
     torch.save(params_to_save, save_path + f_name + ".pt")
     with open(save_path + f_name + ".pkl", "wb") as f:
@@ -417,7 +402,6 @@ for epoch in range(args.epochs):
     
 model.cpu()
 torch.cuda.empty_cache()
-
 
 
 
