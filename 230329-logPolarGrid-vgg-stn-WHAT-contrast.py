@@ -366,13 +366,13 @@ model = Grid_AttentionTransNet(do_stn=False, do_what = True, LAMBDA=LAMBDA, dete
 optimizer = optim.Adam(model.vgg.classifier.parameters(), lr=lr)
 
 save_path = "out/"
-f_name = f"230325_ImgNet_logPolarGrid_vgg_stn_WHAT_{radius}_contrast"
+f_name = f"230329_ImgNet_logPolarGrid_vgg_stn_WHAT_{radius}_contrast"
 
 for epoch in range(args.epochs):
     
     args.radius = std_axe[epoch]
     print(f'****** EPOCH : {epoch}/{args.epochs}, radius = {args.radius} ******')
-    optimizer = optim.Adam(list(model.vgg.classifier[0].parameters())+list(model.vgg.classifier[3].parameters()), lr=lr)
+    optimizer = optim.Adam(model.vgg.classifier[0].parameters(), lr=lr)
 
     acc, loss, kl_loss, entropy = train(epoch, dataloader['train'])
     train_acc.append(acc)
@@ -384,9 +384,7 @@ for epoch in range(args.epochs):
     test_loss.append(loss)
     test_kl_loss.append(kl_loss)
     test_entropy.append(entropy)
-    selected_params = {'vgg.classifier.0.weight', 'vgg.classifier.0.bias',
-                        'vgg.classifier.3.weight', 'vgg.classifier.3.bias',
-                        'vgg.classifier.6.weight', 'vgg.classifier.6.bias'}
+    selected_params = {'vgg.classifier.0.weight', 'vgg.classifier.0.bias'}
     params_to_save = {k: v for k, v in model.state_dict().items() if k in selected_params}
     torch.save(params_to_save, save_path + f_name + ".pt")
     with open(save_path + f_name + ".pkl", "wb") as f:

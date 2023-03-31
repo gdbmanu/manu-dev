@@ -318,7 +318,7 @@ def test(loader):
         for n, (data, target) in enumerate(loader):
             data, target = data.to(device, dtype=torch.float), target.to(device)
 
-            output, theta, z = model(data)
+            output, output_ref, theta, z = model(data)
 
             # sum up batch loss
             #test_loss += F.nll_loss(output, target, size_average=False).item()
@@ -356,7 +356,6 @@ std_axe = np.linspace(radius * 1/args.epochs, radius, args.epochs)
 
     
 model = Grid_AttentionTransNet(do_stn=False, do_what = True, LAMBDA=LAMBDA, deterministic=True).to(device)
-optimizer = optim.Adam(model.vgg.classifier.parameters(), lr=lr)
 
 save_path = "out/"
 f_load = f"230325_ImgNet_logPolarGrid_vgg_stn_WHAT_{radius}_contrast"
@@ -364,13 +363,14 @@ f_name = f"230325b_ImgNet_logPolarGrid_vgg_stn_WHAT_{radius}_contrast"
 
 saved_params = torch.load(save_path+f_load+'.pt')
     
-#selected_params = 'vgg.classifier.0.weight', 'vgg.classifier.0.bias',
+#selected_params = {'vgg.classifier.0.weight', 'vgg.classifier.0.bias',
 #                  'vgg.classifier.3.weight', 'vgg.classifier.3.bias',
 #                  'vgg.classifier.6.weight', 'vgg.classifier.6.bias'} 
          
 #model_params = {k: v for k, v in saved_params.state_dict().items() if k in selected_params}
 model.load_state_dict(saved_params, strict=False)    
 model.LAMBDA = LAMBDA
+optimizer = optim.Adam(model.vgg.classifier[6].parameters(), lr=lr)
 
 with open(save_path + f_load + ".pkl", "rb") as f:
     data = pickle.load(f)
