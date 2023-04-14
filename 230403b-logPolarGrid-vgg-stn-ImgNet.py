@@ -353,28 +353,26 @@ loss_func = nn.CrossEntropyLoss()
 model = Grid_AttentionTransNet(do_stn=True, do_what = False, LAMBDA=LAMBDA, deterministic=True).to(device)
 
 save_path = "out/"
-f_load = f"230329c_ImgNet_logPolarGrid_vgg_stn_WHAT_{radius}_contrast"
-f_name = f"230403_ImgNet_logPolarGrid_vgg_stn_{radius}_{LAMBDA}_contrast"
+#f_load = f"230329c_ImgNet_logPolarGrid_vgg_stn_WHAT_{radius}_contrast"
+f_load = f"230403_ImgNet_logPolarGrid_vgg_stn_{radius}_{LAMBDA}_contrast"
+f_name = f"230403b_ImgNet_logPolarGrid_vgg_stn_{radius}_{LAMBDA}_contrast"
 
 saved_params = torch.load(save_path+f_load+'.pt')
     
-#selected_params = {'vgg.classifier.0.weight', 'vgg.classifier.0.bias',
-#                  'vgg.classifier.3.weight', 'vgg.classifier.3.bias',
-#                  'vgg.classifier.6.weight', 'vgg.classifier.6.bias'} 
-         
-#model_params = {k: v for k, v in saved_params.state_dict().items() if k in selected_params}
 model.load_state_dict(saved_params, strict=False)    
 model.LAMBDA = LAMBDA
 optimizer = optim.Adam(model.vgg.classifier.parameters(), lr=lr)
 
-train_acc = []
-train_loss = []
-train_kl_loss = []
-train_entropy = []
-test_acc = []
-test_loss = []
-test_kl_loss = []
-test_entropy = []
+with open(save_path+f_load+'.pkl','rb') as f:
+    data = pickle.load(f)
+    train_acc = data['train_acc']
+    train_loss = data['train_loss']
+    train_kl_loss = data['train_kl_loss']
+    train_entropy = data['train_entropy']
+    test_acc = data['test_acc']
+    test_loss = data['test_loss']
+    test_kl_loss = data['test_kl_loss']
+    test_entropy = data['test_entropy']
 
 for epoch in range(args.epochs):
     
