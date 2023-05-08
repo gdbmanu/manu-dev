@@ -50,17 +50,17 @@ transform_base =  transforms.Compose([
 
 # In[8]:
 
-image_path = "/envau/work/brainets/dauce.e/data/Imagenet/"
+#image_path = "/envau/work/brainets/dauce.e/data/animal/"
 #image_path = "/media/manu/Seagate Expansion Drive/Data/animal/"
-#image_path = "/run/user/1001/gvfs/sftp:host=bag-008-de03/envau/work/brainets/dauce.e/data/Imagenet/"
-#image_path = "../data/animal/"
+#image_path = "/run/user/1001/gvfs/sftp:host=bag-008-de03/envau/work/brainets/dauce.e/data/animal/"
+image_path = "../data/animal/"
 
 image_dataset = { 'train' : datasets.ImageFolder(
                             image_path+'train',
                             transform=transform_base
                         ),
                   'test' : datasets.ImageFolder(
-                            image_path+'val',
+                            image_path+'test',
                           transform=transform_base
                         )
                 }
@@ -98,7 +98,7 @@ def negentropy_loss(model, z):
     z_mean = torch.mean(z, dim=0)
     z_std = torch.std(z, dim=0)
     p = torch.distributions.Normal(torch.ones_like(z)*z_mean, torch.ones_like(z) * z_std)
-    return p.log_prob(z).sum()
+    return model.LAMBDA * p.log_prob(z).sum()
 
 def kl_divergence(model, z):
     # --------------------------
@@ -146,11 +146,11 @@ class Grid_AttentionTransNet(nn.Module):
         #features.extend([nn.Linear(num_features, 500)]) # Add our layer
         self.vgg.classifier = nn.Sequential(*features) # Replace the model classifier
         
-        self.what_grid = self.logPolarGrid(-4,0) 
+        self.what_grid = self.logPolarGrid(-1,-4) 
         
         n_features = torch.tensor(self.num_features, dtype=torch.float)
         
-        self.fc_what = nn.Linear(self.num_features, 1000)
+        self.fc_what = nn.Linear(self.num_features, 2)
         self.fc_what.weight.data /= torch.sqrt(n_features)
         self.fc_what.bias.data /= torch.sqrt(n_features)
 
@@ -160,7 +160,7 @@ class Grid_AttentionTransNet(nn.Module):
         #features.extend([nn.Linear(num_features, 500)]) # Add our layer
         self.vgg_where.classifier = nn.Sequential(*features) # Replace the model classifier
         
-        self.where_grid = self.logPolarGrid(-3,0)
+        self.where_grid = self.logPolarGrid(0,-3)
         
         self.mu = nn.Linear(self.num_features, 2) #, bias=False)
         self.logvar = nn.Linear(self.num_features, 2) #, bias=False)
@@ -207,7 +207,7 @@ class Grid_AttentionTransNet(nn.Module):
                 self.q = torch.distributions.Normal(mu, sigma)  
                 z = mu
             else:
-                logvar = self.logvar(y) + 6
+                logvar = self.logvar(y) + 5
                 sigma = torch.exp(-logvar / 2)
                 self.q = torch.distributions.Normal(mu, sigma)      
                 z = self.q.rsample()
@@ -221,15 +221,14 @@ class Grid_AttentionTransNet(nn.Module):
             x = F.grid_sample(x, grid)
 
         else:
-            mu = torch.tensor([0, 0],dtype=torch.float)
+            mu = torch.tensor([0, 0],dtype=torch.double)
             mu = mu.unsqueeze(0).repeat(x.size()[0], 1)   
-            sigma = torch.tensor([1, 1],dtype=torch.float)
+            sigma = torch.tensor([1, 1],dtype=torch.double)
             sigma = sigma.unsqueeze(0).repeat(x.size()[0], 1)    
             
             if self.do_what:
                 self.q = torch.distributions.Normal(mu, args.radius * sigma)
-                z = self.q.rsample().to(device)
-                #z = torch.FloatTensor(z).to(device)
+                z = self.q.rsample()
                 print(z[0,...])
                 theta = torch.cat((self.downscale.unsqueeze(0).repeat(
                                 z.size(0), 1, 1), z.unsqueeze(2)),
@@ -277,7 +276,7 @@ def train(epoch, loader):
         optimizer.zero_grad()
         output, theta, z  = model(data)
         if model.do_stn and model.deterministic:
-            loss = loss_func(output, target) + kl_divergence(model, z) 
+            loss = loss_func(output, target) + kl_divergence(model, z) #+ negentropy_loss(model, z)
         else:
             loss = loss_func(output, target)
         loss.backward()
@@ -337,47 +336,61 @@ def test(loader):
                      kl_loss, entropy))
         return correct / len(dataloader['test'].dataset), test_loss, kl_loss, entropy
 
-lr = 1e-4
-LAMBDA = 1e-4
 
-args.epochs = 100
-radius = .5
+# In[29]:
+
+
+lr = 1e-4
+LAMBDA = 1e-2
+
+args.epochs = 150
+radius = 0.1
+
+# In[30]:
+
 
 device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
+#model = torch.load("../models/low_comp_polo_stn.pt")
 
+
+# In[ ]:
+
+
+#optimizer = optim.Adam(list(model.vgg.classifier.parameters())+list(model.fc_what.parameters()), lr=lr)
+#optimizer = optim.Adam(model.fc_what.parameters(), lr=lr)
+#stn_optimizer = optim.Adam(list(model.mu.parameters())+list(model.logvar.parameters()), lr=lr)
+#optimizer = optim.SGD(model.parameters(), lr=lr)
 loss_func = nn.CrossEntropyLoss()
 #scheduler = optim.lr_scheduler.StepLR(optimizer, step_size=10, gamma=0.9, last_epoch=-1) #, verbose=True)
 
-std_axe = np.linspace(radius * 1/args.epochs, radius, args.epochs)
 
+# In[ ]:
+
+
+#log_std_min = -4
+#log_std_max = -2
+
+#std_axe = np.exp(np.linspace(log_std_min, log_std_max, args.epochs))
+#std_axe = np.linspace(1e-2, .5, args.epochs)
+
+train_acc = []
+train_loss = []
+train_kl_loss = []
+train_entropy = []
+test_acc = []
+test_loss = []
+test_kl_loss = []
+test_entropy = []
     
-model = Grid_AttentionTransNet(do_stn=True, do_what = True, LAMBDA=LAMBDA, deterministic=True).to(device)
+model = Grid_AttentionTransNet(do_stn=True, LAMBDA=LAMBDA, deterministic=True).to(device)
+optimizer = optim.Adam(model.fc_what.parameters(), lr=lr)
 
-save_path = "out/"
-orig_f_name = f"230315_ImgNet_logPolarGrid_vgg_stn_{radius}_wide"
-f_name = f"230315b_ImgNet_logPolarGrid_vgg_stn_{radius}_wide"
-
-selected_params = {'fc_what.weight', 'fc_what.bias', 'mu.weight', 'mu.bias'}
-loaded_params = torch.load(save_path + orig_f_name + ".pt")
-params_to_update = {k: v for k, v in loaded_params.items() if k in selected_params}
-model.load_state_dict(params_to_update, strict=False)
-
+#model = torch.load(f"230107_logPolarGrid_vgg_stn_WHAT.pt")
+model = torch.load("../JNJER/230105_logPolarGrid_vgg_stn_WHAT.pt")
+#model = torch.load("../JNJER/230105_logPolarGrid_vgg_stn_wide_WHAT.pt")
 model.LAMBDA = LAMBDA
 
-with open(save_path + orig_f_name + ".pkl", "rb") as f:
-    data = pickle.load(f)
-    train_acc = data["train_acc"]
-    train_loss = data["train_loss"]
-    train_kl_loss = data["train_kl_loss"]
-    train_entropy = data["train_entropy"]
-    test_acc = data["test_acc"]
-    test_loss = data["test_loss"]
-    test_kl_loss = data["test_kl_loss"]
-    test_entropy = data["test_entropy"]
-
-
 for epoch in range(args.epochs):
-    
     if epoch % 2 == 1:
         lr = 3e-6
         model.deterministic=True
@@ -386,9 +399,8 @@ for epoch in range(args.epochs):
         lr = 1e-4
         model.deterministic=False
         optimizer = optim.Adam(model.fc_what.parameters(), lr=lr)
-    
-    args.radius = radius
-    print(f'****** EPOCH : {epoch}/{args.epochs}, radius = {args.radius} ******')
+        
+    args.radius = radius #std_axe[epoch]
     acc, loss, kl_loss, entropy = train(epoch, dataloader['train'])
     train_acc.append(acc)
     train_loss.append(loss)
@@ -399,10 +411,8 @@ for epoch in range(args.epochs):
     test_loss.append(loss)
     test_kl_loss.append(kl_loss)
     test_entropy.append(entropy)
-    selected_params = {'fc_what.weight', 'fc_what.bias', 'mu.weight', 'mu.bias'}
-    params_to_save = {k: v for k, v in model.state_dict().items() if k in selected_params}
-    torch.save(params_to_save, save_path + f_name + ".pt")
-    with open(save_path + f_name + ".pkl", "wb") as f:
+    torch.save(model, f"230221_logPolarGrid_vgg_stn_{LAMBDA}_{args.radius}.pt")
+    with open(f"230221_logPolarGrid_vgg_stn_{LAMBDA}_{args.radius}.pkl", "wb") as f:
         train_data = {
                 "train_acc" : train_acc,
                 "train_loss" : train_loss,
@@ -417,7 +427,6 @@ for epoch in range(args.epochs):
     
 model.cpu()
 torch.cuda.empty_cache()
-
 
 
 

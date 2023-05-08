@@ -338,7 +338,7 @@ def test(loader):
         return correct / len(dataloader['test'].dataset), test_loss, kl_loss, entropy
 
 lr = 1e-4
-LAMBDA = 1e-4
+LAMBDA = 1e-5
 
 args.epochs = 100
 radius = .5
@@ -350,30 +350,28 @@ loss_func = nn.CrossEntropyLoss()
 
 std_axe = np.linspace(radius * 1/args.epochs, radius, args.epochs)
 
+train_acc = []
+train_loss = []
+train_kl_loss = []
+train_entropy = []
+test_acc = []
+test_loss = []
+test_kl_loss = []
+test_entropy = []
     
 model = Grid_AttentionTransNet(do_stn=True, do_what = True, LAMBDA=LAMBDA, deterministic=True).to(device)
+optimizer = optim.Adam(model.fc_what.parameters(), lr=lr)
 
 save_path = "out/"
-orig_f_name = f"230315_ImgNet_logPolarGrid_vgg_stn_{radius}_wide"
-f_name = f"230315b_ImgNet_logPolarGrid_vgg_stn_{radius}_wide"
+what_f_name = f"230313_ImgNet_logPolarGrid_vgg_stn_WHAT_{radius}_wide"
+f_name = f"230319_ImgNet_logPolarGrid_vgg_stn_{radius}_{LAMBDA}"
 
-selected_params = {'fc_what.weight', 'fc_what.bias', 'mu.weight', 'mu.bias'}
-loaded_params = torch.load(save_path + orig_f_name + ".pt")
+selected_params = {'fc_what.weight', 'fc_what.bias'}
+loaded_params = torch.load(save_path + what_f_name + ".pt")
 params_to_update = {k: v for k, v in loaded_params.items() if k in selected_params}
 model.load_state_dict(params_to_update, strict=False)
 
 model.LAMBDA = LAMBDA
-
-with open(save_path + orig_f_name + ".pkl", "rb") as f:
-    data = pickle.load(f)
-    train_acc = data["train_acc"]
-    train_loss = data["train_loss"]
-    train_kl_loss = data["train_kl_loss"]
-    train_entropy = data["train_entropy"]
-    test_acc = data["test_acc"]
-    test_loss = data["test_loss"]
-    test_kl_loss = data["test_kl_loss"]
-    test_entropy = data["test_entropy"]
 
 
 for epoch in range(args.epochs):
@@ -381,7 +379,10 @@ for epoch in range(args.epochs):
     if epoch % 2 == 1:
         lr = 3e-6
         model.deterministic=True
-        optimizer = optim.Adam(model.mu.parameters(), lr=lr)
+        params = []
+        params.extend(list(model.vgg_where.classifier.parameters()))
+        params.extend(list(model.mu.parameters()))
+        optimizer = optim.Adam(params, lr=lr)
     else:
         lr = 1e-4
         model.deterministic=False
@@ -399,7 +400,11 @@ for epoch in range(args.epochs):
     test_loss.append(loss)
     test_kl_loss.append(kl_loss)
     test_entropy.append(entropy)
-    selected_params = {'fc_what.weight', 'fc_what.bias', 'mu.weight', 'mu.bias'}
+    selected_params = {'fc_what.weight', 'fc_what.bias', 
+                        'mu.weight', 'mu.bias', 
+                        'vgg_where.classifier.0.weight', 'vgg_where.classifier.0.bias',
+                        'vgg_where.classifier.3.weight', 'vgg_where.classifier.3.bias',
+                        }
     params_to_save = {k: v for k, v in model.state_dict().items() if k in selected_params}
     torch.save(params_to_save, save_path + f_name + ".pt")
     with open(save_path + f_name + ".pkl", "wb") as f:
@@ -417,7 +422,6 @@ for epoch in range(args.epochs):
     
 model.cpu()
 torch.cuda.empty_cache()
-
 
 
 
