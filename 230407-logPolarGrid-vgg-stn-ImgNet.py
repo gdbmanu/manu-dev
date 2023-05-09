@@ -338,7 +338,7 @@ def test(loader):
         return correct / len(dataloader['test'].dataset), test_loss, kl_loss, entropy
 
 lr = 1e-4
-LAMBDA = 1e-6
+LAMBDA = 0
 
 args.epochs = 100
 radius = .5
@@ -354,7 +354,7 @@ model = Grid_AttentionTransNet(do_stn=True, do_what = False, LAMBDA=LAMBDA, dete
 
 save_path = "out/"
 f_load = f"230329b_ImgNet_logPolarGrid_vgg_stn_WHAT_{radius}_contrast"
-f_name = f"230407_ImgNet_logPolarGrid_vgg_stn_{radius}_{LAMBDA}_contrast_SGD"
+f_name = f"230407_ImgNet_logPolarGrid_vgg_stn_{radius}_{LAMBDA}_contrast_SGD_lr3-9"
 
 saved_params = torch.load(save_path+f_load+'.pt')
     
