@@ -12,6 +12,7 @@ import torch.nn.functional as F
 import torch.optim as optim
 
 from torchvision import datasets, models, transforms
+from utils import view_data
 from typing import List, Tuple
 
 from easydict import EasyDict as edict
@@ -49,12 +50,10 @@ transform_base =  transforms.Compose([
 
 # In[8]:
 
-#image_path = "/envau/work/brainets/dauce.e/data/Imagenet/"
-image_path = "/media/manu/Seagate Expansion Drive/Data/Imagenet/"
+image_path = "/envau/work/brainets/dauce.e/data/Imagenet/"
+#image_path = "/media/manu/Seagate Expansion Drive/Data/animal/"
 #image_path = "/run/user/1001/gvfs/sftp:host=bag-008-de03/envau/work/brainets/dauce.e/data/Imagenet/"
 #image_path = "../data/animal/"
-#image_path = "../animal/"
-
 
 image_dataset = { 'train' : datasets.ImageFolder(
                             image_path+'train',
@@ -147,7 +146,7 @@ class Grid_AttentionTransNet(nn.Module):
         #features.extend([nn.Linear(num_features, 500)]) # Add our layer
         #self.vgg.classifier = nn.Sequential(*features) # Replace the model classifier
         
-        self.what_grid = self.logPolarGrid(0,-4) 
+        self.what_grid = self.logPolarGrid(-1,-4) 
         
         
         #self.fc_what = nn.Linear(self.num_features, 1000)
@@ -161,7 +160,7 @@ class Grid_AttentionTransNet(nn.Module):
         #features.extend([nn.Linear(num_features, 500)]) # Add our layer
         self.vgg_where.classifier = nn.Sequential(*features) # Replace the model classifier
         
-        self.where_grid = self.logPolarGrid(0,-3)
+        #self.where_grid = self.logPolarGrid(0,-3)
         
         self.mu = nn.Linear(self.num_features, 2) #, bias=False)
         self.logvar = nn.Linear(self.num_features, 2) #, bias=False)
@@ -254,7 +253,6 @@ class Grid_AttentionTransNet(nn.Module):
     def forward(self, x):
         # transform the input
         x, theta, z = self.stn(x)
-
         
         logPolx = F.grid_sample(x, self.what_grid)
         if True: #with torch.no_grad():
@@ -278,7 +276,7 @@ def train(epoch, loader):
    
         optimizer.zero_grad()
         output, theta, z  = model(data)
-        if model.do_stn and model.deterministic and not model.do_what:
+        if model.do_stn and model.deterministic:
             loss = loss_func(output, target) + kl_divergence(model, z) 
         else:
             loss = loss_func(output, target) #loss_func_contrast(output, output_ref)
@@ -292,8 +290,7 @@ def train(epoch, loader):
                 100. * batch_idx / len(dataloader['train']), 
                 loss_func(output, target).item(), 
                 kl_divergence(model, z).item(),
-                -negentropy_loss(model, z).item()
-                ))
+                -negentropy_loss(model, z).item()))
             print(f'Correct :{100 * pred.eq(target.view_as(pred)).sum().item() / args.batch_size}')
         train_loss += loss_func(output, target).item()
         kl_loss += kl_divergence(model, z).item()
@@ -340,12 +337,10 @@ def test(loader):
                      kl_loss, entropy))
         return correct / len(dataloader['test'].dataset), test_loss, kl_loss, entropy
 
-lr = 1e-8
+lr = 1e-4
 LAMBDA = 0
-do_stn = True
-do_what = False
 
-args.epochs = 100
+args.epochs = 1000
 radius = .5
 
 device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
@@ -355,41 +350,53 @@ loss_func = nn.CrossEntropyLoss()
 # scheduler = optim.lr_scheduler.StepLR(optimizer, step_size=10, gamma=0.9, last_epoch=-1) #, verbose=True)
 # std_axe = np.linspace(radius * 1/args.epochs, radius, args.epochs)
     
-model = Grid_AttentionTransNet(do_stn=do_stn, do_what = do_what, LAMBDA=LAMBDA, deterministic=True).to(device)
+model = Grid_AttentionTransNet(do_stn=True, do_what = False, LAMBDA=LAMBDA, deterministic=True).to(device)
 
 save_path = "out/"
-f_load = f"2023-03-24_train_vgg16_tlc_10_2"
-#f_name = f"230403_ImgNet_logPolarGrid_vgg_stn_{radius}_{LAMBDA}_contrast"
+f_load_init = f"230329b_ImgNet_logPolarGrid_vgg_stn_WHAT_{radius}_contrast"
+f_load = f"230407c_ImgNet_logPolarGrid_vgg_stn_{radius}_{LAMBDA}_contrast_SGD_lr3-9"
+f_name = f"230407d_ImgNet_logPolarGrid_vgg_stn_{radius}_{LAMBDA}_contrast_SGD_lr3-9"
 
-saved_params = torch.load(f_load+'.pt', map_location=torch.device('cpu'))
+saved_params_init = torch.load(save_path+f_load_init+'.pt')
+saved_params = torch.load(save_path+f_load+'.pt')
     
 #selected_params = {'vgg.classifier.0.weight', 'vgg.classifier.0.bias',
 #                  'vgg.classifier.3.weight', 'vgg.classifier.3.bias',
 #                  'vgg.classifier.6.weight', 'vgg.classifier.6.bias'} 
          
 #model_params = {k: v for k, v in saved_params.state_dict().items() if k in selected_params}
-model.vgg.load_state_dict(saved_params, strict=False)    
+model.load_state_dict(saved_params_init, strict=False)    
+model.load_state_dict(saved_params, strict=False)    
 model.LAMBDA = LAMBDA
 optimizer = optim.Adam(model.vgg.classifier.parameters(), lr=lr)
 
-train_acc = []
-train_loss = []
-train_kl_loss = []
-train_entropy = []
-test_acc = []
-test_loss = []
-test_kl_loss = []
-test_entropy = []
+with open(save_path+f_load+".pkl", "rb") as f: 
+    data=pickle.load(f) 
+    train_acc = data['train_acc']
+    train_loss = data['train_loss']
+    train_kl_loss = data['train_kl_loss']
+    train_entropy = data['train_entropy']
+    test_acc = data['test_acc']
+    test_loss = data['test_loss']
+    test_kl_loss = data['test_kl_loss']
+    test_entropy = data['test_entropy']
 
 for epoch in range(args.epochs):
     
     args.radius = radius
     
-    model.deterministic=True
-    params = []
-    params.extend(list(model.vgg_where.classifier.parameters()))
-    params.extend(list(model.mu.parameters()))
-    optimizer = optim.SGD(params, lr=lr, momentum = 0.9)
+    if epoch % 2 == 0:
+        lr = 3e-9
+        model.deterministic=True
+        params = []
+        params.extend(list(model.mu.parameters()))
+        #optimizer = optim.Adam(params, lr=lr)
+        optimizer = optim.SGD(params, lr=lr, momentum = 0.9)
+    else:
+        lr = 1e-3
+        model.deterministic=False
+        #optimizer = optim.Adam(model.vgg.classifier[6].parameters(), lr=lr)
+        optimizer = optim.SGD(model.vgg.classifier[6].parameters(), lr=lr, momentum=0.95)
         
     print(f'****** EPOCH : {epoch}/{args.epochs}, radius = {args.radius} ******')
     acc, loss, kl_loss, entropy = train(epoch, dataloader['train'])
@@ -402,9 +409,8 @@ for epoch in range(args.epochs):
     test_loss.append(loss)
     test_kl_loss.append(kl_loss)
     test_entropy.append(entropy)
-    selected_params = {'mu.weight', 'mu.bias', 
-                       'vgg_where.classifier.0.weight', 'vgg_where.classifier.0.bias',
-                       'vgg_where.classifier.3.weight', 'vgg_where.classifier.3.bias',}
+    selected_params = {'vgg.classifier.6.weight', 'vgg.classifier.6.bias',
+                        'mu.weight', 'mu.bias',} 
     params_to_save = {k: v for k, v in model.state_dict().items() if k in selected_params}
     torch.save(params_to_save, save_path + f_name + ".pt")
     with open(save_path + f_name + ".pkl", "wb") as f:
