@@ -206,7 +206,10 @@ class Grid_AttentionTransNet(nn.Module):
         
         if self.do_stn:
             with torch.no_grad():
-                y = self.vgg_where(logPolx)
+                y = self.vgg_where.features(logPolx)
+                y = self.vgg_where.avgpool(y)
+                y = y.view(-1,7,7,512)
+            y = self.vgg_where.classifier(y)
             mu = self.mu(y)
                                
             if self.deterministic:
