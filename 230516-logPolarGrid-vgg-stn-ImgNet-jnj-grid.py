@@ -162,7 +162,7 @@ class Grid_AttentionTransNet(nn.Module):
         self.vgg_where.classifier = nn.Sequential(
             nn.Conv2d(512, 32, 1),
             nn.ReLU(),
-            nn.Conv2d(32, 1),
+            nn.Conv2d(32, 1, 1),
             nn.Softmax2d(),
             nn.Flatten(),
         ) # Replace the model classifier
