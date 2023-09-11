@@ -78,12 +78,29 @@ dataloader = { 'train' : torch.utils.data.DataLoader(
                             num_workers=num_workers,
                         ),
                'test' : torch.utils.data.DataLoader(
-                            image_dataset['test'], batch_size=args.batch_size,
+                   image_dataset['test'], batch_size=args.batch_size,
                             shuffle=True, 
                             num_workers=num_workers,
                         )
              }
 
+
+
+# Créez un sous-ensemble en sélectionnant les indices des échantillons que vous souhaitez inclure
+#subset_indices = {'train': np.arange(1200), 'test': np.arange(120)}
+
+# Créez un DataLoader pour le sous-ensemble en utilisant SubsetRandomSampler
+#from torch.utils.data import SubsetRandomSampler
+
+#dataloader = {}
+#for cat in ('train', 'test'):
+#    dataloader[cat] = torch.utils.data.DataLoader(
+#            dataset=dataloader_orig[cat].dataset,  # Utilisez le même ensemble de données que le DataLoader d'origine
+#            batch_size=dataloader_orig[cat].batch_size,
+#            sampler=SubsetRandomSampler(subset_indices[cat]),  # Utilisez SubsetRandomSampler avec les indices du sous-ensemble
+#            num_workers=dataloader_orig[cat].num_workers,
+#            pin_memory=dataloader_orig[cat].pin_memory,
+#            )
 
 
 def expand_dim(tensor, dim, desired_dim_len):
@@ -138,7 +155,9 @@ class Grid_AttentionTransNet(nn.Module):
         self.LAMBDA = LAMBDA
         
         self.resnet = models.resnet101(pretrained=True) 
+        #self.resnet.train():
         self.resnet_where = models.resnet101(pretrained=True) 
+        #self.resnet_where.eval():
         
         ##  The what pathway
         
@@ -162,7 +181,7 @@ class Grid_AttentionTransNet(nn.Module):
         #features.extend([nn.Linear(num_features, 500)]) # Add our layer
         self.resnet_where = nn.Sequential(*features) # Replace the model classifier
         
-        #self.where_grid = self.logPolarGrid(0,-3)
+        self.where_grid = self.logPolarGrid(0,-5)
         
         self.mu = nn.Linear(self.num_features, 2) #, bias=False)
         self.logvar = nn.Linear(self.num_features, 2) #, bias=False)
@@ -197,7 +216,7 @@ class Grid_AttentionTransNet(nn.Module):
 
     def stn(self: object, x: torch.Tensor) -> Tuple[torch.Tensor]:
     
-        logPolx = x #F.grid_sample(x, self.where_grid)
+        logPolx = F.grid_sample(x, self.where_grid)
         
         if self.do_stn:
             with torch.no_grad():
@@ -257,8 +276,8 @@ class Grid_AttentionTransNet(nn.Module):
         x, theta, z = self.stn(x)
         
         logPolx = F.grid_sample(x, self.what_grid)
-        if True: #with torch.no_grad():
-            y = self.resnet(logPolx)  
+        #self.resnet.train(): #with torch.no_grad():
+        y = self.resnet(logPolx)  
         #y = self.fc_what(y)
        
         return y, theta, z
@@ -280,7 +299,7 @@ def train(epoch, loader):
         optimizer.zero_grad()
         output, theta, z  = model(data)
         if model.do_stn and model.deterministic and not model.do_what:
-            loss = loss_func(output, target) + kl_divergence(model, z) 
+            loss = 0 * loss_func(output, target) + kl_divergence(model, z) 
         else:
             loss = loss_func(output, target) #loss_func_contrast(output, output_ref)
         loss.backward()
@@ -336,25 +355,26 @@ def test(loader):
         test_loss /= n
         kl_loss /= n
         entropy /= n
+        test_len = len(dataloader['test'].dataset) #len(subset_indices['test'])
         print('\nTest set: CE loss: {:.4f}, Accuracy: {}/{} ({:.0f}%), KL loss: {:.4f}, Entropy: {:.4f}\n'.
-              format(test_loss, correct, len(dataloader['test'].dataset),
-                     100. * correct / len(dataloader['test'].dataset),
+              format(test_loss, correct, test_len,
+                     100. * correct / test_len,
                      kl_loss, entropy))
-        return correct / len(dataloader['test'].dataset), test_loss, kl_loss, entropy
+        return correct / test_len, test_loss, kl_loss, entropy
 
-lr = 3e-9 #1e-6 
-LAMBDA = 1e-4 
+lr = 1e-8 #1e-5 #3e-8  
+LAMBDA = 7e-3 #3e-2 
 opt = "SGD"
 do_stn = True
 do_what = False
-deterministic = False
+deterministic = True
 
 args.epochs = 100
-radius = .5
+radius = .1
 
 device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
 
-loss_func = nn.CrossEntropyLoss()
+loss_func =  nn.CrossEntropyLoss()
 # loss_func_contrast = nn.MSELoss()
 # scheduler = optim.lr_scheduler.StepLR(optimizer, step_size=10, gamma=0.9, last_epoch=-1) #, verbose=True)
 # std_axe = np.linspace(radius * 1/args.epochs, radius, args.epochs)
@@ -364,7 +384,7 @@ model = Grid_AttentionTransNet(do_stn=do_stn, do_what = do_what, LAMBDA=LAMBDA, 
 
 save_path = "out/"
 f_load = "resnet_polar_1000"
-f_name = f"230712_ImgNet_logPolarGrid_resnet_stn_{radius}_{LAMBDA}_{deterministic}_jnj_grid_{opt}"
+f_name = f"230907_TEST2_ImgNet_logPolarGrid_resnet_stn_{radius}_{LAMBDA}_{deterministic}_jnj_grid_{opt}"
 
 saved_params = torch.load(save_path+f_load+'.pt', map_location=torch.device('cpu'))
     
@@ -374,11 +394,14 @@ saved_params = torch.load(save_path+f_load+'.pt', map_location=torch.device('cpu
          
 #model_params = {k: v for k, v in saved_params.state_dict().items() if k in selected_params}
 model.resnet.load_state_dict(saved_params, strict=False)    
+model.resnet_where.load_state_dict(saved_params, strict=False)    
+#print(model.resnet)
+#exit()
 model.LAMBDA = LAMBDA
 args.radius = radius
     
 params = []
-#params.extend(list(model.resnet_where.fc.parameters()))
+#params.extend(list(model.resnet_where.parameters()))
 params.extend(list(model.mu.parameters()))
 if not model.deterministic:
     params.extend(list(model.logvar.parameters()))
