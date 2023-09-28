@@ -210,7 +210,7 @@ class Grid_AttentionTransNet(nn.Module):
         self.identity = nn.Parameter(torch.tensor([[1, 0], [0, 1]],
                                                    dtype=torch.float),
                                       requires_grad=False)
-        self.downscale = nn.Parameter(torch.tensor([[0.1, 0], [0, 0.1]],
+        self.downscale = nn.Parameter(torch.tensor([[0.33, 0], [0, 0.33]],
                                                    dtype=torch.float),
                                       requires_grad=False)
         self.dropout = torch.nn.Dropout()
@@ -245,7 +245,7 @@ class Grid_AttentionTransNet(nn.Module):
             if self.deterministic:
                 sigma = args.radius * torch.ones_like(mu)
                 self.q = torch.distributions.Normal(mu, sigma)  
-                z = mu * 0
+                z = mu
             else:
                 logvar = self.logvar(y) + 6
                 sigma = torch.exp(-logvar / 2)
@@ -295,7 +295,7 @@ class Grid_AttentionTransNet(nn.Module):
         # transform the input
         x_shift, theta, z = self.stn(x)
         
-        logPolx = x_shift #F.grid_sample(x_shift, self.what_grid)
+        logPolx = F.grid_sample(x_shift, self.what_grid) # x_shift
         #self.resnet.train(): #with torch.no_grad():
         y = self.resnet(logPolx) * label_filter  
         #y = self.fc_what(y)
@@ -386,7 +386,7 @@ def test(loader):
         return correct / test_len, test_loss, kl_loss, entropy
 
 lr = 1e-8 #5e-9  * args.batch_size / 40 #1e-5 #3e-8  
-LAMBDA = 1 #3e-3 #3e-2 
+LAMBDA = 1e-1 #3e-3 #3e-2 
 opt = "SGD"
 do_stn = True
 do_what = False
@@ -412,7 +412,7 @@ model = Grid_AttentionTransNet(do_stn=do_stn, do_what = do_what, LAMBDA=LAMBDA, 
 save_path = "out/"
 f_what = "resnet_focus"
 f_where = "resnet_polar_1000"
-f_name = f"230926_ImgNet_logPolarGrid_resnet_stn_{radius}_{LAMBDA}_{deterministic}_jnj_focus_{opt}_{n_labels}"
+f_name = f"230928_ImgNet_logPolarGrid_resnet_stn_{radius}_{LAMBDA}_{deterministic}_jnj_focus_{opt}_{n_labels}"
 
 what_params = torch.load(save_path+f_what+'.pt', map_location=torch.device('cpu'))
 where_params = torch.load(save_path+f_where+'.pt', map_location=torch.device('cpu'))
