@@ -22,7 +22,7 @@ import pickle
 
 args = edict({})
 args.image_size = 240
-args.batch_size = 20
+args.batch_size = 40
 args.log_interval = 100
 args.std_sched = .3
 
@@ -49,7 +49,8 @@ transform_base =  transforms.Compose([
 
 # In[8]:
 
-image_path = "/envau/work/brainets/dauce.e/data/Imagenet/"
+#image_path = "/envau/work/brainets/dauce.e/data/Imagenet/"
+image_path = "/home/INT/dauce.e/data/Imagenet/"
 #image_path = "/media/manu/Seagate Expansion Drive/Data/Imagenet/"
 #image_path = "/run/user/1001/gvfs/sftp:host=bag-008-de03/envau/work/brainets/dauce.e/data/Imagenet/"
 #image_path = "../data/animal/"
@@ -91,7 +92,7 @@ dataloader_orig = { 'train' : torch.utils.data.DataLoader(
 
 # Créez un DataLoader pour le sous-ensemble en utilisant SubsetRandomSampler
 from torch.utils.data import SubsetRandomSampler
-n_labels = 100
+n_labels = 1000
 if n_labels < 1000:
     # Créez un sous-ensemble en sélectionnant les indices des échantillons que vous souhaitez inclure
     train_size = 100 * n_labels
@@ -399,7 +400,7 @@ def test(loader):
         return correct / test_len, test_loss, kl_loss, entropy
 
 lr =  3e-7 * args.batch_size / 40 #1e-5 #3e-9  
-LAMBDA = 1e-3 #3e-3 #3e-2 
+LAMBDA = 3e-3 #3e-3 #3e-2 
 opt = "Adam"
 do_stn = True
 do_what = False
@@ -426,7 +427,7 @@ save_path = "out/"
 f_what = "resnet_focus"
 #f_where = "resnet_polar_1000"
 #f_where = f"231015_ImgNet_logPolarGrid_resnet_stn_{radius}_{LAMBDA}_{deterministic}_jnj_focus_{opt}_{n_labels}_{lr}"
-f_name = f"231031_ImgNet_logPolarGrid_resnet_stn_{radius}_{LAMBDA}_{deterministic}_jnj_focus_{opt}_{n_labels}_{lr}"
+f_name = f"231031_ImgNet_logPolarGrid_resnet_stn_{radius}_{LAMBDA}_{deterministic}_jnj_focus_{opt}_{n_labels}_{lr:.4f}"
 
 what_params = torch.load(save_path+f_what+'.pt', map_location=torch.device('cpu'))
 #where_params = torch.load(save_path+f_where+'.pt', map_location=torch.device('cpu'))
