@@ -22,7 +22,7 @@ import pickle
 
 args = edict({})
 args.image_size = 240
-args.batch_size = 25
+args.batch_size = 40
 args.log_interval = 100
 args.std_sched = .3
 
@@ -342,11 +342,12 @@ def test(loader):
                      kl_loss, entropy))
         return correct / len(dataloader['test'].dataset), test_loss, kl_loss, entropy
 
-lr = 3e-5 #1e-9 #3e-9
-LAMBDA =1e-3 
+lr = 3e-9 #1e-6 
+LAMBDA = 1e-4 
+opt = "SGD"
 do_stn = True
 do_what = False
-deterministic = True
+deterministic = False
 
 args.epochs = 100
 radius = .5
@@ -360,9 +361,10 @@ loss_func = nn.CrossEntropyLoss()
     
 model = Grid_AttentionTransNet(do_stn=do_stn, do_what = do_what, LAMBDA=LAMBDA, deterministic=deterministic).to(device)
 
+
 save_path = "out/"
 f_load = "resnet_polar_1000"
-f_name = f"230712_ImgNet_logPolarGrid_resnet_stn_{radius}_{LAMBDA}_{deterministic}_jnj_grid_Adam"
+f_name = f"230712_ImgNet_logPolarGrid_resnet_stn_{radius}_{LAMBDA}_{deterministic}_jnj_grid_{opt}"
 
 saved_params = torch.load(save_path+f_load+'.pt', map_location=torch.device('cpu'))
     
@@ -376,12 +378,14 @@ model.LAMBDA = LAMBDA
 args.radius = radius
     
 params = []
-params.extend(list(model.resnet_where.fc.parameters()))
+#params.extend(list(model.resnet_where.fc.parameters()))
 params.extend(list(model.mu.parameters()))
 if not model.deterministic:
     params.extend(list(model.logvar.parameters()))
-#optimizer = optim.SGD(params, lr=lr, momentum = 0.9)
-optimizer = optim.Adam(params, lr=lr)
+if opt == 'SGD':
+    optimizer = optim.SGD(params, lr=lr, momentum = 0.9)
+else:
+    optimizer = optim.Adam(params, lr=lr)
 
 train_acc = []
 train_loss = []
@@ -393,7 +397,6 @@ test_kl_loss = []
 test_entropy = []
 
 for epoch in range(args.epochs):
-    
         
     print(f'****** EPOCH : {epoch}/{args.epochs}, radius = {args.radius} ******')
     acc, loss, kl_loss, entropy = train(epoch, dataloader['train'])
@@ -406,9 +409,7 @@ for epoch in range(args.epochs):
     test_loss.append(loss)
     test_kl_loss.append(kl_loss)
     test_entropy.append(entropy)
-    selected_params = {'mu.weight', 'mu.bias', 'logvar.weight', 'logvar.bias',  
-                       'vgg_where.classifier.0.weight', 'vgg_where.classifier.0.bias',
-                       'vgg_where.classifier.3.weight', 'vgg_where.classifier.3.bias',}
+    selected_params = {'mu.weight', 'mu.bias', 'logvar.weight', 'logvar.bias'}  
     params_to_save = {k: v for k, v in model.state_dict().items() if k in selected_params}
     torch.save(params_to_save, save_path + f_name + ".pt")
     with open(save_path + f_name + ".pkl", "wb") as f:

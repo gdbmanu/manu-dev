@@ -162,9 +162,12 @@ class Grid_AttentionTransNet(nn.Module):
         self.vgg_where.classifier = nn.Sequential(
             nn.Conv2d(512, 32, 1),
             nn.ReLU(),
-            nn.Conv2d(32, 1),
-            nn.Softmax2d(),
+            nn.Conv2d(32, 1, 1),
             nn.Flatten(),
+            #nn.Softmax(),
+            nn.ReLU(),
+            nn.Linear(self.num_features, self.num_features),
+            nn.ReLU()
         ) # Replace the model classifier
         
         self.where_grid = self.logPolarGrid(0,-4)
@@ -172,11 +175,11 @@ class Grid_AttentionTransNet(nn.Module):
         self.mu = nn.Linear(self.num_features, 2) #, bias=False)
         self.logvar = nn.Linear(self.num_features, 2) #, bias=False)
         
-        '''self.mu.weight.data /= torch.sqrt(n_features) 
+        self.mu.weight.data /= torch.sqrt(n_features) 
         self.mu.bias.data /= torch.sqrt(n_features)
         
         self.logvar.weight.data /= torch.sqrt(n_features)
-        self.logvar.bias.data /= torch.sqrt(n_features)'''
+        self.logvar.bias.data /= torch.sqrt(n_features)
 
         self.downscale = nn.Parameter(torch.tensor([[1, 0], [0, 1]],
                                                    dtype=torch.float),
@@ -205,15 +208,16 @@ class Grid_AttentionTransNet(nn.Module):
         logPolx = F.grid_sample(x, self.where_grid)
         
         if self.do_stn:
-            with torch.no_grad():
-                y = self.vgg_where.features(logPolx)
-                y = self.vgg_where.avgpool(y)
-                y = y.view(-1,7,7,512)
+            #with torch.no_grad():
+            y = self.vgg_where.features(logPolx)
+            y = self.vgg_where.avgpool(y)
+            y = y.view(-1,512,7,7)
             y = self.vgg_where.classifier(y)
             mu = self.mu(y)
                                
             if self.deterministic:
-                sigma = args.radius * torch.ones_like(mu)
+                with torch.no_grad():
+                    sigma = args.radius * torch.ones_like(mu)
                 self.q = torch.distributions.Normal(mu, sigma)  
                 z = mu
             else:
@@ -221,7 +225,7 @@ class Grid_AttentionTransNet(nn.Module):
                 sigma = torch.exp(-logvar / 2)
                 self.q = torch.distributions.Normal(mu, sigma)      
                 z = self.q.rsample()
-            print(z[0,...])
+            print(z[0:3,...])
             theta = torch.cat((self.downscale.unsqueeze(0).repeat(
                                 z.size(0), 1, 1), z.unsqueeze(2)),
                                   dim=2)
@@ -288,7 +292,8 @@ def train(epoch, loader):
         optimizer.zero_grad()
         output, theta, z  = model(data)
         if model.do_stn and model.deterministic and not model.do_what:
-            loss = loss_func(output, target) + kl_divergence(model, z) 
+            #loss = loss_func(output, target) + kl_divergence(model, z) 
+            loss = kl_divergence(model, z) 
         else:
             loss = loss_func(output, target) #loss_func_contrast(output, output_ref)
         loss.backward()
@@ -350,8 +355,8 @@ def test(loader):
                      kl_loss, entropy))
         return correct / len(dataloader['test'].dataset), test_loss, kl_loss, entropy
 
-lr = 1e-9 #3e-9
-LAMBDA =1e-3 
+lr = 1e-8 #3e-9
+LAMBDA = 10 #1e-3 
 do_stn = True
 do_what = False
 deterministic = True
