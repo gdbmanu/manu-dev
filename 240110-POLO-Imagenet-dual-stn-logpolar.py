@@ -452,7 +452,9 @@ class Polo_AttentionTransNet(nn.Module):
             else:
                 logvar = self.logvar(x_all) + 5
                 sigma = torch.exp(-logvar / 2)
-                self.q = torch.distributions.MultivariateNormal(mu, sigma * torch.eye(2))      
+                #print(sigma)
+                print(mu.size(), sigma.size())
+                self.q = torch.distributions.MultivariateNormal(mu, torch.diag_embed(sigma))      
                 z = self.q.rsample()
             
             print(z[0,...])
@@ -647,7 +649,7 @@ def test(loader, n_sample_test, training_step):
 
 
 lr = 1e-4
-LAMBDA = 1e-2
+LAMBDA = 1
 deterministic = False
 do_stn = True
 do_what = False
@@ -661,9 +663,9 @@ if __name__ == '__main__':
     #model = torch.load("../models/low_comp_polo_stn.pt")
     model = Polo_AttentionTransNet(LAMBDA=LAMBDA, deterministic=deterministic, do_stn=do_stn, do_what=do_what).to(device)
 
-    f_name = f"out/231223_polo_stn_dual_WHAT_{radius}_{LAMBDA}.pt"
+    f_name = f"out/231223_polo_stn_dual_WHAT_0.01_0.01.pt"
     model = torch.load(f_name)
-    model.do_stn, model.do_what, model.deterministic = do_stn, do_what, deterministic
+    model.do_stn, model.do_what, model.deterministic, model.LAMBDA = do_stn, do_what, deterministic, LAMBDA
 
     print(model)
     print(model.do_stn, model.do_what, model.deterministic)
