@@ -268,11 +268,8 @@ def kl_divergence(model, z):
     # Monte carlo KL divergence
     # --------------------------
     # 1. define the first two probabilities (in this case Normal for both)
-    z_dims = z.size()
     if args.radius > 0:
-        #p = torch.distributions.Normal(torch.zeros_like(z), args.radius * torch.ones_like(z))
-        p = torch.distributions.MultivariateNormal(torch.zeros_like(z), 
-                                                   args.radius * torch.einsum('i,jk->ijk',torch.ones(z_dims[0]), torch.eye(2)))
+        p = torch.distributions.Normal(torch.zeros_like(z), args.radius * torch.ones_like(z))
     else:
         p = torch.distributions.Normal(torch.zeros_like(z), 1e-6 * torch.ones_like(z))
 
@@ -283,22 +280,15 @@ def kl_divergence(model, z):
 
     z_mean = torch.mean(z, dim=0)
     z_std = torch.std(z, dim=0) + 1e-6
-    #print(z)
-    #print(torch.cov(z.T))
-    #print(torch.eye(2))
-    z_cov = torch.cov(z.T) + 1e-6 * torch.eye(2)
     #print(z_std)
-    #q = torch.distributions.MultivariateNormal(torch.ones_like(z)*z_mean, torch.ones_like(z) * z_std)
-    q = torch.distributions.MultivariateNormal(torch.ones_like(z)*z_mean, torch.ones(z_dims[0], 2, 2) * z_cov)
+    q = torch.distributions.Normal(torch.ones_like(z)*z_mean, torch.ones_like(z) * z_std)
     log_qzx = q.log_prob(z)
 
     # kl
-    #print(log_pz)
-    #print(log_qzx)
     kl = (log_qzx - log_pz)
     
     # sum over last dim to go from single dim distribution to multi-dim
-    kl = model.LAMBDA * kl.sum()
+    kl = kl.sum()
     return kl
 
 # In[30]:
@@ -575,7 +565,7 @@ def train(epoch, loader, n_sample_train, training_step):
         optimizer.zero_grad()
         output, theta, z = model(data_original, data_polo, training_step)
         if model.do_stn and model.deterministic:
-            loss = loss_func(output, target) + kl_divergence(model, z) #+ negentropy_loss(model, z)
+            loss = loss_func(output, target) + model.LAMBDA * kl_divergence(model, z) #+ negentropy_loss(model, z)
         else:
             loss = loss_func(output, target)
         loss.backward()
@@ -670,7 +660,7 @@ if __name__ == '__main__':
 
     f_name = f"out/231223_polo_stn_dual_WHAT_{radius}_{LAMBDA}.pt"
     model = torch.load(f_name)
-    model.do_stn, model.do_what = do_stn, do_what
+    model.do_stn, model.do_what, model.deterministic, model.LAMBDA = do_stn, do_what, deterministic, LAMBDA
 
     print(model)
     print(model.do_stn, model.do_what)

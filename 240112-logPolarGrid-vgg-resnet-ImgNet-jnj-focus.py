@@ -151,8 +151,9 @@ def kl_divergence(model, z):
     z_dims = z.size()
     if args.radius > 0:
         #p = torch.distributions.Normal(torch.zeros_like(z), args.radius * torch.ones_like(z))
-        p = torch.distributions.MultivariateNormal(torch.zeros_like(z), 
-                                                   args.radius * torch.einsum('i,jk->ijk',torch.ones(z_dims[0]), torch.eye(2)))
+        p = torch.distributions.MultivariateNormal(torch.zeros_like(z).to(device), 
+                                                   args.radius * torch.einsum('i,jk->ijk',torch.ones(z_dims[0]).to(device), 
+                                                                              torch.eye(2).to(device)))
     else:
         p = torch.distributions.Normal(torch.zeros_like(z), 1e-6 * torch.ones_like(z))
 
@@ -166,10 +167,10 @@ def kl_divergence(model, z):
     #print(z)
     #print(torch.cov(z.T))
     #print(torch.eye(2))
-    z_cov = torch.cov(z.T) + 1e-6 * torch.eye(2)
+    z_cov = torch.cov(z.T) + 1e-6 * torch.eye(2).to(device)
     #print(z_std)
     #q = torch.distributions.MultivariateNormal(torch.ones_like(z)*z_mean, torch.ones_like(z) * z_std)
-    q = torch.distributions.MultivariateNormal(torch.ones_like(z)*z_mean, torch.ones(z_dims[0], 2, 2) * z_cov)
+    q = torch.distributions.MultivariateNormal(torch.ones_like(z)*z_mean, torch.ones(z_dims[0], 2, 2).to(device) * z_cov)
     log_qzx = q.log_prob(z)
 
     # kl
@@ -178,7 +179,7 @@ def kl_divergence(model, z):
     kl = (log_qzx - log_pz)
     
     # sum over last dim to go from single dim distribution to multi-dim
-    kl = model.LAMBDA * kl.sum()
+    kl = kl.sum()
     return kl
 
 # In[22]:
@@ -278,7 +279,7 @@ class Grid_AttentionTransNet(nn.Module):
                 y_mult = nn.Hardsigmoid()(10 * (y_mult-1))
                 #print(y_mult)
                 #print(torch.mean(y_mult),torch.std(y_mult),torch.min(y_mult),torch.max(y_mult))
-                #y_mult_mult = torch.prod(y_mult, dim=0)
+                #y_mult_mult = torch.prod(y_mult, dim=0)p
                 #print(torch.mean(y_mult_mult),torch.std(y_mult_mult),torch.min(y_mult_mult),torch.max(y_mult_mult))
             if True: #with torch.no_grad():
                 y_where = self.resnet_where(logPolx).view(-1, self.num_features)
@@ -359,41 +360,41 @@ def train(epoch, loader):
     entropy = 0
     correct = 0
     try:
-      for batch_idx, (data, target) in enumerate(loader):
-
-        data, target = data.to(device, dtype=torch.float), target.to(device)
-   
-        optimizer.zero_grad()
-        output, theta, z  = model(data)
-        if model.do_stn and not model.do_what:
-            loss = loss_func(output, target) + LAMBDA * kl_divergence(model, z) 
-        else:
-            loss = loss_func(output, target) #loss_func_contrast(output, output_ref)
-        loss.backward()
-        #print(model.resnet.fc.weight[:,labels[0]].grad)
-        #print(model.resnet.layer1[0].conv1.weight.grad)
-        print(model.mu.weight.grad)
-        #print(model.shift_grid.grad)
-        optimizer.step()
-        pred = output.argmax(dim=1, keepdim=True)
-        if True: #batch_idx % args.log_interval == 0:
-            print('Train Epoch: {}/{} [{}/{} ({:.0f}%)]\tLoss: {:.6f}\tKL Loss: {:.6f}\tEntropy : {:.6f}'.format(
-                epoch, args.epochs, batch_idx * args.batch_size,
-                len(subset_indices['train']), #len(dataloader['train'].dataset),
-                100. * batch_idx * args.batch_size/len(subset_indices['train']), #/ len(dataloader['train']), 
-                loss_func(output, target).item(), 
-                kl_divergence(model, z).item(),
-                -negentropy_loss(model, z).item()
-                ))
-            print(f'Correct :{100 * pred.eq(target.view_as(pred)).sum().item() / args.batch_size}')
-        train_loss += loss_func(output, target).item()
-        kl_loss += kl_divergence(model, z).item()
-        entropy -= negentropy_loss(model, z).item()
-        # get the index of the max log-probability
-        #pred = output.max(1, keepdim=True)[1]
-        correct += pred.eq(target.view_as(pred)).sum().item()
+        for batch_idx, (data, target) in enumerate(loader):
+    
+            data, target = data.to(device, dtype=torch.float), target.to(device)
+        
+            optimizer.zero_grad()
+            output, theta, z  = model(data)
+            if model.do_stn and not model.do_what:
+                loss = loss_func(output, target) + LAMBDA * kl_divergence(model, z) 
+            else:
+                loss = loss_func(output, target) #loss_func_contrast(output, output_ref)
+            loss.backward()
+            #print(model.resnet.fc.weight[:,labels[0]].grad)
+            #print(model.resnet.layer1[0].conv1.weight.grad)
+            print(model.mu.weight.grad)
+            #print(model.shift_grid.grad)
+            optimizer.step()
+            pred = output.argmax(dim=1, keepdim=True)
+            if True: #batch_idx % args.log_interval == 0:
+                print('Train Epoch: {}/{} [{}/{} ({:.0f}%)]\tLoss: {:.6f}\tKL Loss: {:.6f}\tEntropy : {:.6f}'.format(
+                    epoch, args.epochs, batch_idx * args.batch_size,
+                    len(subset_indices['train']), #len(dataloader['train'].dataset),
+                    100. * batch_idx * args.batch_size/len(subset_indices['train']), #/ len(dataloader['train']), 
+                    loss_func(output, target).item(), 
+                    kl_divergence(model, z).item(),
+                    -negentropy_loss(model, z).item()
+                    ))
+                print(f'Correct :{100 * pred.eq(target.view_as(pred)).sum().item() / args.batch_size}')
+            train_loss += loss_func(output, target).item()
+            kl_loss += kl_divergence(model, z).item()
+            entropy -= negentropy_loss(model, z).item()
+            # get the index of the max log-probability
+            #pred = output.max(1, keepdim=True)[1]
+            correct += pred.eq(target.view_as(pred)).sum().item()
     except:
-      pass
+          pass
     train_loss /= (batch_idx+1)
     kl_loss /= (batch_idx+1)
     entropy /= (batch_idx+1)
@@ -411,20 +412,20 @@ def test(loader):
         correct = 0
         # model.deterministic = True
         try:
-          for n, (data, target) in enumerate(loader):
-            data, target = data.to(device, dtype=torch.float), target.to(device)
-
-            output, theta, z = model(data)
-
-            # sum up batch loss
-            #test_loss += F.nll_loss(output, target, size_average=False).item()
-            test_loss += loss_func(output, target).item()
-            kl_loss += kl_divergence(model, z).item()
-            entropy -= negentropy_loss(model, z).item()
-            # get the index of the max log-probability
-            #pred = output.max(1, keepdim=True)[1]
-            pred = output.argmax(dim=1, keepdim=True)
-            correct += pred.eq(target.view_as(pred)).sum().item()
+            for n, (data, target) in enumerate(loader):
+                data, target = data.to(device, dtype=torch.float), target.to(device)
+        
+                output, theta, z = model(data)
+        
+                # sum up batch loss
+                #test_loss += F.nll_loss(output, target, size_average=False).item()
+                test_loss += loss_func(output, target).item()
+                kl_loss += kl_divergence(model, z).item()
+                entropy -= negentropy_loss(model, z).item()
+                # get the index of the max log-probability
+                #pred = output.max(1, keepdim=True)[1]
+                pred = output.argmax(dim=1, keepdim=True)
+                correct += pred.eq(target.view_as(pred)).sum().item()
         except:
           pass
         #model.deterministic = deterministic
@@ -440,7 +441,7 @@ def test(loader):
         return correct / test_len, test_loss, kl_loss, entropy
 
 lr =  3e-7 * args.batch_size / 40 #1e-5 #3e-9  
-LAMBDA = 0.001 #1e-2 #3e-2 
+LAMBDA = 0.03 #1e-2 #3e-2 
 opt = "Adam"
 do_stn = True
 do_what = False

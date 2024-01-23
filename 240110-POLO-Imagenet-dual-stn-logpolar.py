@@ -278,20 +278,25 @@ def kl_divergence(model, z):
 
 
     # 2. get the probabilities from the equation
-    log_qzx = model.q.log_prob(z)
+    #log_qzx = model.q.log_prob(z)
     log_pz = p.log_prob(z)
 
-    #z_mean = torch.mean(z, dim=0)
-    #z_std = torch.std(z, dim=0) + 1e-6
+    z_mean = torch.mean(z, dim=0)
+    z_std = torch.std(z, dim=0) + 1e-6
+    #print(z)
+    #print(torch.cov(z.T))
+    #print(torch.eye(2))
+    z_cov = torch.cov(z.T) + 1e-6 * torch.eye(2).to(device)
     #print(z_std)
-    #q = torch.distributions.Normal(torch.ones_like(z)*z_mean, torch.ones_like(z) * z_std)
-    #log_qzx = q.log_prob(z)
+    #q = torch.distributions.MultivariateNormal(torch.ones_like(z)*z_mean, torch.ones_like(z) * z_std)
+    q = torch.distributions.MultivariateNormal(torch.ones_like(z)*z_mean, torch.ones(z_dims[0], 2, 2).to(device) * z_cov)
+    log_qzx = q.log_prob(z)
 
     # kl
     kl = (log_qzx - log_pz)
     
     # sum over last dim to go from single dim distribution to multi-dim
-    kl = model.LAMBDA * kl.sum()
+    kl = kl.sum()
     return kl
 
 # In[30]:
@@ -447,7 +452,7 @@ class Polo_AttentionTransNet(nn.Module):
             mu = self.mu(x_all)
             if self.deterministic:
                 sigma = args.radius * torch.ones_like(mu)  
-                self.q = torch.distributions.MultivariateNormal(mu, sigma * torch.eye(2))  
+                self.q = torch.distributions.MultivariateNormal(mu, torch.diag_embed(sigma))
                 z = mu
             else:
                 logvar = self.logvar(x_all) + 5
@@ -549,7 +554,7 @@ class Polo_AttentionTransNet(nn.Module):
 
         return y, theta, z
 
-def train(epoch, loader, n_sample_train, training_step):
+def train(epoch, loader, n_sample_train, training_step, f_name_out):
     model.train()
     train_loss = 0
     kl_loss = 0
@@ -558,43 +563,48 @@ def train(epoch, loader, n_sample_train, training_step):
     if n_sample_train is None:
         n_sample_train = len(image_dataset['train']) // args.batch_size
         print(f'n_sample_train : {n_sample_train}')
-    for num_batch, (data, target) in enumerate(loader):
-
-        data_original, data_polo = data[0], data[1]
-        data_original = data_original.to(device, dtype=torch.double)
-        data_polo['in'] = data_polo['in'].to(device, dtype=torch.double)
-        data_polo['out'] = data_polo['out'].to(device, dtype=torch.double)
-        data_polo['ext'] = data_polo['ext'].to(device, dtype=torch.double)
-        target = target.to(device)
-        
-        optimizer.zero_grad()
-        output, theta, z = model(data_original, data_polo, training_step)
-        if model.do_stn and model.deterministic:
-            loss = loss_func(output, target) + kl_divergence(model, z) #+ negentropy_loss(model, z)
-        else:
-            loss = loss_func(output, target)
-        loss.backward()
-        optimizer.step()
-        pred = output.argmax(dim=1, keepdim=True)
-        if True: #batch_idx % args.log_interval == 0:
-            print('Train Epoch: {}/{} [{}/{} ({:.0f}%)]\tLoss: {:.6f}\tKL Loss: {:.6f}\tEntropy bonus: {:.6f}'.format(
-                epoch, 
-                args.epochs, 
-                (num_batch+1) * args.batch_size,
-                n_sample_train * args.batch_size,
-                100. * (num_batch+1) / n_sample_train, 
-                loss_func(output, target).item(), 
-                kl_divergence(model, z).item(),
-                -negentropy_loss(model, z).item()))
-            print(f'Correct :{100 * pred.eq(target.view_as(pred)).sum().item() / args.batch_size}')
-        train_loss += loss_func(output, target).item()
-        kl_loss += kl_divergence(model, z).item()
-        entropy -= negentropy_loss(model, z).item()
-        # get the index of the max log-probability
-        #pred = output.max(1, keepdim=True)[1]
-        correct += pred.eq(target.view_as(pred)).sum().item()
-        if num_batch == n_sample_train - 1:
-            break
+    try:
+        for num_batch, (data, target) in enumerate(loader):
+    
+            data_original, data_polo = data[0], data[1]
+            data_original = data_original.to(device, dtype=torch.double)
+            data_polo['in'] = data_polo['in'].to(device, dtype=torch.double)
+            data_polo['out'] = data_polo['out'].to(device, dtype=torch.double)
+            data_polo['ext'] = data_polo['ext'].to(device, dtype=torch.double)
+            target = target.to(device)
+            
+            optimizer.zero_grad()
+            output, theta, z = model(data_original, data_polo, training_step)
+            if model.do_stn and model.deterministic:
+                loss = loss_func(output, target) + model.LAMBDA * kl_divergence(model, z) #+ negentropy_loss(model, z)
+            else:
+                loss = loss_func(output, target)
+            loss.backward()
+            optimizer.step()
+            pred = output.argmax(dim=1, keepdim=True)
+            if True: #batch_idx % args.log_interval == 0:
+                print('Train Epoch: {}/{} [{}/{} ({:.0f}%)]\tLoss: {:.6f}\tKL Loss: {:.6f}\tEntropy bonus: {:.6f}'.format(
+                    epoch, 
+                    args.epochs, 
+                    (num_batch+1) * args.batch_size,
+                    n_sample_train * args.batch_size,
+                    100. * (num_batch+1) / n_sample_train, 
+                    loss_func(output, target).item(), 
+                    kl_divergence(model, z).item(),
+                    -negentropy_loss(model, z).item()))
+                print(f'Correct :{100 * pred.eq(target.view_as(pred)).sum().item() / args.batch_size}')
+            train_loss += loss_func(output, target).item()
+            kl_loss += kl_divergence(model, z).item()
+            entropy -= negentropy_loss(model, z).item()
+            # get the index of the max log-probability
+            #pred = output.max(1, keepdim=True)[1]
+            correct += pred.eq(target.view_as(pred)).sum().item()
+            if num_batch % 50 == 0:
+                torch.save(model, f_name_out+".pt")
+            if num_batch == n_sample_train - 1:
+                break
+    except:
+        pass
     train_loss /= n_sample_train
     kl_loss /= n_sample_train
     entropy /= n_sample_train
@@ -611,27 +621,30 @@ def test(loader, n_sample_test, training_step):
         if n_sample_test is None:
             n_sample_test = len(image_dataset['test']) // args.batch_size
         model.deterministic = True
-        for num_batch, (data, target) in enumerate(loader):
-            data_original, data_polo = data[0], data[1]
-            data_original = data_original.to(device, dtype=torch.double)            
-            data_polo['in'] = data_polo['in'].to(device, dtype=torch.double) 
-            data_polo['out'] = data_polo['out'].to(device, dtype=torch.double) 
-            data_polo['ext'] = data_polo['ext'].to(device, dtype=torch.double)
-            target = target.to(device)
-
-            output, theta, z = model(data_original, data_polo, training_step)
-
-            # sum up batch loss
-            #test_loss += F.nll_loss(output, target, size_average=False).item()
-            test_loss += loss_func(output, target).item()
-            kl_loss += kl_divergence(model, z).item()
-            entropy -= negentropy_loss(model, z).item()
-            # get the index of the max log-probability
-            #pred = output.max(1, keepdim=True)[1]
-            pred = output.argmax(dim=1, keepdim=True)
-            correct += pred.eq(target.view_as(pred)).sum().item()
-            if num_batch == n_sample_test - 1:
-                break
+        try:
+            for num_batch, (data, target) in enumerate(loader):
+                data_original, data_polo = data[0], data[1]
+                data_original = data_original.to(device, dtype=torch.double)            
+                data_polo['in'] = data_polo['in'].to(device, dtype=torch.double) 
+                data_polo['out'] = data_polo['out'].to(device, dtype=torch.double) 
+                data_polo['ext'] = data_polo['ext'].to(device, dtype=torch.double)
+                target = target.to(device)
+    
+                output, theta, z = model(data_original, data_polo, training_step)
+    
+                # sum up batch loss
+                #test_loss += F.nll_loss(output, target, size_average=False).item()
+                test_loss += loss_func(output, target).item()
+                kl_loss += kl_divergence(model, z).item()
+                entropy -= negentropy_loss(model, z).item()
+                # get the index of the max log-probability
+                #pred = output.max(1, keepdim=True)[1]
+                pred = output.argmax(dim=1, keepdim=True)
+                correct += pred.eq(target.view_as(pred)).sum().item()
+                if num_batch == n_sample_test - 1:
+                    break
+        except:
+            pass
 
         test_loss /= n_sample_test
         kl_loss /= n_sample_test
@@ -649,8 +662,8 @@ def test(loader, n_sample_test, training_step):
 
 
 lr = 1e-4
-LAMBDA = 1
-deterministic = False
+LAMBDA = 0.1
+deterministic = True
 do_stn = True
 do_what = False
 radius = 0.01
@@ -663,9 +676,11 @@ if __name__ == '__main__':
     #model = torch.load("../models/low_comp_polo_stn.pt")
     model = Polo_AttentionTransNet(LAMBDA=LAMBDA, deterministic=deterministic, do_stn=do_stn, do_what=do_what).to(device)
 
-    f_name = f"out/231223_polo_stn_dual_WHAT_0.01_0.01.pt"
-    model = torch.load(f_name)
+    f_name_in = f"out/231223_polo_stn_dual_WHAT_0.01_0.01.pt"
+    model = torch.load(f_name_in)
     model.do_stn, model.do_what, model.deterministic, model.LAMBDA = do_stn, do_what, deterministic, LAMBDA
+
+    f_name_out = f"out/240110_polo_stn_dual_{LAMBDA}"
 
     print(model)
     print(model.do_stn, model.do_what, model.deterministic)
@@ -698,7 +713,10 @@ if __name__ == '__main__':
         n_sample_test = None
         
         training_step = 0
-        acc, loss, kl_loss, entropy = train(epoch, dataloader['train'], n_sample_train, training_step = training_step)
+        acc, loss, kl_loss, entropy = train(epoch, dataloader['train'], 
+                                            n_sample_train, 
+                                            training_step = training_step,
+                                            f_name_out = f_name_out+f"_{args.radius}")
         train_acc.append(acc)
         train_loss.append(loss)
         train_kl_loss.append(kl_loss)
@@ -709,8 +727,8 @@ if __name__ == '__main__':
         test_loss.append(loss)
         test_kl_loss.append(kl_loss)
         test_entropy.append(entropy)
-        torch.save(model, f"out/240110_polo_stn_dual_{radius}_{LAMBDA}.pt")
-        with open(f"out/240110_polo_stn_dual_{radius}_{LAMBDA}.pkl", "wb") as f:
+        torch.save(model, f_name_out+f"_{args.radius}"+".pt")
+        with open(f_name_out+".pkl", "wb") as f:
             train_data = {
                 "train_acc" : train_acc,
                 "train_loss" : train_loss,
