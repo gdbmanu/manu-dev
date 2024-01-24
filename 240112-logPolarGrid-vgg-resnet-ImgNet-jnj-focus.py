@@ -441,7 +441,7 @@ def test(loader):
         return correct / test_len, test_loss, kl_loss, entropy
 
 lr =  3e-7 * args.batch_size / 40 #1e-5 #3e-9  
-LAMBDA = 0.03 #1e-2 #3e-2 
+LAMBDA = 0.01 #1e-2 #3e-2 
 opt = "Adam"
 do_stn = True
 do_what = False
