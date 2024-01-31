@@ -662,7 +662,7 @@ def test(loader, n_sample_test, training_step):
 
 
 lr = 1e-4
-LAMBDA = 0.1
+LAMBDA = 0.03
 deterministic = True
 do_stn = True
 do_what = False
